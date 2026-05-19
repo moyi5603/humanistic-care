@@ -107,6 +107,59 @@ export const careModuleList: CareModule[] = [
   careModules.workload,
 ];
 
+/** 方案有效日期 (生日关怀等) */
+export type ValidDateRange = {
+  mode: "permanent" | "year" | "custom";
+  start?: string; // YYYY-MM-DD
+  end?: string;
+};
+
+export const defaultValidDateRange = (): ValidDateRange => ({
+  mode: "year",
+});
+
+export const summarizeValidDate = (
+  range: ValidDateRange,
+): { text: string; sub: string } => {
+  const year = new Date().getFullYear();
+  if (range.mode === "permanent") {
+    return { text: "长期有效", sub: "方案持续生效, 无截止日期" };
+  }
+  if (range.mode === "year") {
+    return {
+      text: `${year} 年全年`,
+      sub: `${year}/01/01 — ${year}/12/31`,
+    };
+  }
+  if (range.start && range.end) {
+    return {
+      text: `${range.start} 至 ${range.end}`,
+      sub: "自定义有效期限",
+    };
+  }
+  return { text: "请设置起止日期", sub: "自定义有效期限" };
+};
+
+/** 列表/摘要用一行文案 */
+export const formatValidDateForList = (range?: ValidDateRange): string =>
+  summarizeValidDate(range ?? defaultValidDateRange()).text;
+
+/** 表单完整状态, 用于新建/编辑后回显 */
+export type CareRuleFormData = {
+  audience: {
+    all: boolean;
+    deptIds: string[];
+    empIds: string[];
+    tags: string[];
+  };
+  trigger?: string;
+  festival?: string;
+  customContent?: string;
+  workloadTrigger?: WorkloadTriggerState;
+  weatherTrigger?: WeatherTriggerState;
+  validDateRange?: ValidDateRange;
+};
+
 export type CareRule = {
   id: string;
   type: CareType;
@@ -117,6 +170,10 @@ export type CareRule = {
   points: number;
   enabled: boolean;
   reached: number; // 已触达人次
+  /** 生日关怀: 有效日期(列表展示) */
+  validDateRange?: ValidDateRange;
+  /** 可选: 保存表单草稿, 编辑时完整还原 */
+  formData?: CareRuleFormData;
 };
 
 export const sampleRules: CareRule[] = [
@@ -124,12 +181,13 @@ export const sampleRules: CareRule[] = [
     id: "r1",
     type: "birthday",
     name: "全员生日祝福",
-    audience: "全公司 1,286 人",
+    audience: "全公司员工",
     triggerTime: "生日当天 09:00",
     template: "🎂 生日快乐!愿新的一岁充满惊喜与成长",
     points: 50,
     enabled: true,
     reached: 312,
+    validDateRange: { mode: "year" },
   },
   {
     id: "r2",

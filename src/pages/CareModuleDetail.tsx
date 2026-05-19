@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ShoppingBag,
   TrendingUp,
+  CalendarRange,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -29,10 +30,15 @@ import {
 import { toast } from "sonner";
 import {
   careModules,
-  sampleRules,
+  formatValidDateForList,
   type CareType,
   type CareRule,
 } from "@/data/humanityCare";
+import {
+  useCareRules,
+  deleteCareRule,
+  setCareRuleEnabled,
+} from "@/data/careRulesStore";
 
 
 const pointLabels: Record<CareType, string> = {
@@ -49,19 +55,11 @@ const CareModuleDetail = () => {
   const mod = careModules[moduleType];
   const Icon = mod.icon;
 
-  const rules = useMemo(
-    () => sampleRules.filter((r) => r.type === moduleType),
-    [moduleType],
-  );
+  const rules = useCareRules(moduleType);
 
   const totalReached = rules.reduce((acc, r) => acc + r.reached, 0);
   const totalPoints = rules.reduce((acc, r) => acc + r.points * r.reached, 0);
   const [tab, setTab] = useState<"stats" | "rules">("rules");
-  const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(rules.map((r) => [r.id, r.enabled])),
-  );
-  const [deletedMap, setDeletedMap] = useState<Record<string, boolean>>({});
-  const visibleRules = rules.filter((r) => !deletedMap[r.id]);
 
   return (
     <>
@@ -162,25 +160,25 @@ const CareModuleDetail = () => {
                   <Plus className="h-3.5 w-3.5" /> 新建方案
                 </button>
               </div>
-              {visibleRules.length === 0 ? (
+              {rules.length === 0 ? (
                 <EmptyState onCreate={() => navigate(`/agents/humanity-care/${moduleType}/new`)} />
               ) : (
                 <ul className="space-y-3">
-                  {visibleRules.map((r) => (
+                  {rules.map((r) => (
                     <RuleCard
                       key={r.id}
                       rule={r}
                       moduleType={moduleType}
-                      enabled={enabledMap[r.id] ?? r.enabled}
+                      enabled={r.enabled}
                       onToggle={(next) => {
-                        setEnabledMap((m) => ({ ...m, [r.id]: next }));
+                        setCareRuleEnabled(r.id, next);
                         toast.success(next ? `已启用「${r.name}」` : `已停用「${r.name}」`);
                       }}
                       onEdit={() =>
                         navigate(`/agents/humanity-care/${moduleType}/new?ruleId=${r.id}`)
                       }
                       onDelete={() => {
-                        setDeletedMap((m) => ({ ...m, [r.id]: true }));
+                        deleteCareRule(r.id);
                         toast.success(`已删除「${r.name}」`);
                       }}
                     />
@@ -279,6 +277,17 @@ const RuleCard = ({
             <span className="truncate max-w-[55%]">{rule.audience}</span>
             <span className="shrink-0">· {rule.triggerTime}</span>
           </p>
+          {moduleType === "birthday" && (
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <CalendarRange className="h-3 w-3 shrink-0 opacity-70" />
+              <span className="truncate">
+                有效日期 ·{" "}
+                {formatValidDateForList(
+                  rule.validDateRange ?? rule.formData?.validDateRange,
+                )}
+              </span>
+            </p>
+          )}
         </div>
       </div>
 

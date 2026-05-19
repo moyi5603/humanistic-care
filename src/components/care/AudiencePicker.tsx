@@ -2,12 +2,13 @@ import { useMemo, useState } from "react";
 import {
   Users,
   ChevronRight,
+  ChevronDown,
   Search,
   X,
   Check,
+  Minus,
   Building2,
   UserRound,
-  ChevronLeft,
   Sparkles,
 } from "lucide-react";
 import {
@@ -61,6 +62,45 @@ const isTenureTag = (t: string) =>
 
 const flatDepts = flattenDepts(ALL_DEPTS);
 
+type CheckState = "checked" | "indeterminate" | "unchecked";
+
+const collectSubtreeDeptIds = (dept: Department): string[] => {
+  const ids = [dept.id];
+  dept.children?.forEach((c) => ids.push(...collectSubtreeDeptIds(c)));
+  return ids;
+};
+
+const collectSubtreeEmpIds = (deptId: string): string[] => {
+  const deptIds = new Set<string>([deptId]);
+  const walk = (id: string) => {
+    flatDepts
+      .filter((d) => d.parentId === id)
+      .forEach((d) => {
+        deptIds.add(d.id);
+        walk(d.id);
+      });
+  };
+  walk(deptId);
+  return ALL_EMP.filter((e) => deptIds.has(e.deptId)).map((e) => e.id);
+};
+
+const getDeptCheckState = (
+  dept: Department,
+  draft: AudienceSelection,
+): CheckState => {
+  const subtreeDeptIds = collectSubtreeDeptIds(dept);
+  const subtreeEmpIds = collectSubtreeEmpIds(dept.id);
+  const selectedCount =
+    subtreeDeptIds.filter((id) => draft.deptIds.includes(id)).length +
+    subtreeEmpIds.filter((id) => draft.empIds.includes(id)).length;
+  const total = subtreeDeptIds.length + subtreeEmpIds.length;
+  if (selectedCount === 0) return "unchecked";
+  if (selectedCount === total) return "checked";
+  return "indeterminate";
+};
+
+const defaultExpandedIds = () => new Set<string>();
+
 export const AudiencePicker = ({
   value,
   onChange,
@@ -72,33 +112,27 @@ export const AudiencePicker = ({
   // 临时草稿(打开时复制 value, 确认后写回)
   const [draft, setDraft] = useState<AudienceSelection>(value);
   const [tab, setTab] = useState<"contacts" | "rules">("contacts");
-  const [stack, setStack] = useState<Department[]>([]); // 部门面包屑
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpandedIds);
   const [keyword, setKeyword] = useState("");
 
   const handleOpenChange = (o: boolean) => {
     setOpen(o);
     if (o) {
       setDraft(value);
-      setStack([]);
+      setExpandedIds(defaultExpandedIds());
       setKeyword("");
       setTab("contacts");
     }
   };
 
-  const currentDepts = stack.length
-    ? stack[stack.length - 1].children ?? []
-    : ALL_DEPTS;
-
-  const currentEmps = useMemo(() => {
-    if (!stack.length) return [];
-    const deptId = stack[stack.length - 1].id;
-    // 当前部门 + 子部门下的员工
-    const wantedDeptIds = new Set<string>([deptId]);
-    flatDepts
-      .filter((d) => d.parentId === deptId)
-      .forEach((d) => wantedDeptIds.add(d.id));
-    return ALL_EMP.filter((e) => wantedDeptIds.has(e.deptId));
-  }, [stack]);
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const searchResults = useMemo(() => {
     const k = keyword.trim().toLowerCase();
@@ -113,14 +147,27 @@ export const AudiencePicker = ({
     };
   }, [keyword]);
 
-  const toggleDept = (id: string) => {
-    setDraft((d) => ({
-      ...d,
-      all: false,
-      deptIds: d.deptIds.includes(id)
-        ? d.deptIds.filter((x) => x !== id)
-        : [...d.deptIds, id],
-    }));
+  const toggleDeptSubtree = (dept: Department) => {
+    const subtreeDeptIds = collectSubtreeDeptIds(dept);
+    const subtreeEmpIds = collectSubtreeEmpIds(dept.id);
+    const state = getDeptCheckState(dept, draft);
+
+    setDraft((d) => {
+      if (state === "checked") {
+        return {
+          ...d,
+          all: false,
+          deptIds: d.deptIds.filter((id) => !subtreeDeptIds.includes(id)),
+          empIds: d.empIds.filter((id) => !subtreeEmpIds.includes(id)),
+        };
+      }
+      return {
+        ...d,
+        all: false,
+        deptIds: [...new Set([...d.deptIds, ...subtreeDeptIds])],
+        empIds: [...new Set([...d.empIds, ...subtreeEmpIds])],
+      };
+    });
   };
   const toggleEmp = (id: string) => {
     setDraft((d) => ({
@@ -230,41 +277,7 @@ export const AudiencePicker = ({
                 </div>
               </div>
 
-              {/* 面包屑 */}
-              {!searchResults && stack.length > 0 && (
-                <div className="flex items-center gap-1 overflow-x-auto px-4 py-1.5 text-[11px] text-muted-foreground scrollbar-hide">
-                  <button
-                    onClick={() => setStack([])}
-                    className="shrink-0 text-foreground"
-                  >
-                    通讯录
-                  </button>
-                  {stack.map((d, i) => (
-                    <span key={d.id} className="flex items-center gap-1">
-                      <ChevronRight className="h-3 w-3" />
-                      <button
-                        onClick={() => setStack(stack.slice(0, i + 1))}
-                        className={
-                          i === stack.length - 1
-                            ? "shrink-0 text-foreground"
-                            : "shrink-0"
-                        }
-                      >
-                        {d.name}
-                      </button>
-                    </span>
-                  ))}
-                  <button
-                    onClick={() => setStack(stack.slice(0, -1))}
-                    className="ml-auto flex shrink-0 items-center gap-0.5 text-primary"
-                  >
-                    <ChevronLeft className="h-3 w-3" />
-                    返回
-                  </button>
-                </div>
-              )}
-
-              {/* 列表 */}
+              {/* 组织架构树 */}
               <div className="flex-1 overflow-y-auto px-2 pb-2 scrollbar-hide">
                 {searchResults ? (
                   <SearchResults
@@ -272,28 +285,21 @@ export const AudiencePicker = ({
                     depts={searchResults.depts}
                     emps={searchResults.emps}
                     draft={draft}
-                    onToggleDept={toggleDept}
+                    onToggleDeptSubtree={toggleDeptSubtree}
                     onToggleEmp={toggleEmp}
                   />
                 ) : (
                   <ul className="space-y-0.5">
-                    {currentDepts.map((d) => (
-                      <DeptRow
+                    {ALL_DEPTS.map((d) => (
+                      <DeptTreeNode
                         key={d.id}
                         dept={d}
-                        checked={draft.deptIds.includes(d.id)}
-                        onToggle={() => toggleDept(d.id)}
-                        onEnter={
-                          d.children?.length ? () => setStack([...stack, d]) : undefined
-                        }
-                      />
-                    ))}
-                    {currentEmps.map((e) => (
-                      <EmpRow
-                        key={e.id}
-                        emp={e}
-                        checked={draft.empIds.includes(e.id)}
-                        onToggle={() => toggleEmp(e.id)}
+                        depth={0}
+                        draft={draft}
+                        expandedIds={expandedIds}
+                        onToggleExpand={toggleExpanded}
+                        onToggleDeptSubtree={toggleDeptSubtree}
+                        onToggleEmp={toggleEmp}
                       />
                     ))}
                   </ul>
@@ -481,58 +487,162 @@ const SelectedPreview = ({ value }: { value: AudienceSelection }) => {
 
 /* ---------- 子部件 ---------- */
 
-const DeptRow = ({
-  dept,
-  checked,
+const TriStateCheckbox = ({
+  state,
   onToggle,
-  onEnter,
+  label,
+}: {
+  state: CheckState;
+  onToggle: () => void;
+  label: string;
+}) => (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onToggle();
+    }}
+    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+      state === "unchecked"
+        ? "border-border bg-background"
+        : "border-primary bg-primary text-primary-foreground"
+    }`}
+    aria-label={label}
+    aria-checked={state === "indeterminate" ? "mixed" : state === "checked"}
+  >
+    {state === "checked" && <Check className="h-3 w-3" strokeWidth={3} />}
+    {state === "indeterminate" && <Minus className="h-3 w-3" strokeWidth={3} />}
+  </button>
+);
+
+const DeptTreeNode = ({
+  dept,
+  depth,
+  draft,
+  expandedIds,
+  onToggleExpand,
+  onToggleDeptSubtree,
+  onToggleEmp,
 }: {
   dept: Department;
-  checked: boolean;
-  onToggle: () => void;
-  onEnter?: () => void;
-}) => (
-  <li className="flex items-center gap-1 rounded-xl px-2 py-2 active:bg-secondary/60">
-    <button
-      onClick={onToggle}
-      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-        checked
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border bg-background"
-      }`}
-      aria-label="选择部门"
-    >
-      {checked && <Check className="h-3 w-3" strokeWidth={3} />}
-    </button>
-    <button
-      onClick={onEnter ?? onToggle}
-      className="ml-1 flex flex-1 items-center justify-between text-left"
-    >
-      <span className="flex items-center gap-1.5">
+  depth: number;
+  draft: AudienceSelection;
+  expandedIds: Set<string>;
+  onToggleExpand: (id: string) => void;
+  onToggleDeptSubtree: (dept: Department) => void;
+  onToggleEmp: (id: string) => void;
+}) => {
+  const hasChildren = (dept.children?.length ?? 0) > 0;
+  const emps = ALL_EMP.filter((e) => e.deptId === dept.id);
+  const hasContent = hasChildren || emps.length > 0;
+  const expanded = expandedIds.has(dept.id);
+  const checkState = getDeptCheckState(dept, draft);
+
+  return (
+    <li>
+      <div
+        className="flex items-center gap-1 rounded-xl py-2 pr-2 active:bg-secondary/60"
+        style={{ paddingLeft: depth * 16 + 8 }}
+      >
+        <TriStateCheckbox
+          state={checkState}
+          onToggle={() => onToggleDeptSubtree(dept)}
+          label={`选择${dept.name}`}
+        />
+        <button
+          type="button"
+          onClick={() => hasContent && onToggleExpand(dept.id)}
+          className="ml-1 flex flex-1 items-center gap-1 text-left"
+        >
+          {hasContent ? (
+            expanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )
+          ) : (
+            <span className="h-4 w-4 shrink-0" />
+          )}
+          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm text-foreground">{dept.name}</span>
+          <span className="text-[11px] text-muted-foreground">
+            {dept.count} 人
+          </span>
+        </button>
+      </div>
+      {expanded && hasContent && (
+        <ul>
+          {dept.children?.map((child) => (
+            <DeptTreeNode
+              key={child.id}
+              dept={child}
+              depth={depth + 1}
+              draft={draft}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
+              onToggleDeptSubtree={onToggleDeptSubtree}
+              onToggleEmp={onToggleEmp}
+            />
+          ))}
+          {emps.map((e) => (
+            <EmpRow
+              key={e.id}
+              emp={e}
+              depth={depth + 1}
+              checked={draft.empIds.includes(e.id)}
+              onToggle={() => onToggleEmp(e.id)}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+};
+
+const DeptRow = ({
+  dept,
+  draft,
+  onToggleDeptSubtree,
+}: {
+  dept: Department;
+  draft: AudienceSelection;
+  onToggleDeptSubtree: (dept: Department) => void;
+}) => {
+  const checkState = getDeptCheckState(dept, draft);
+  return (
+    <li className="flex items-center gap-1 rounded-xl px-2 py-2 active:bg-secondary/60">
+      <TriStateCheckbox
+        state={checkState}
+        onToggle={() => onToggleDeptSubtree(dept)}
+        label={`选择${dept.name}`}
+      />
+      <span className="ml-1 flex flex-1 items-center gap-1.5">
         <Building2 className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm text-foreground">{dept.name}</span>
         <span className="text-[11px] text-muted-foreground">
           {dept.count} 人
         </span>
       </span>
-      {onEnter && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-    </button>
-  </li>
-);
+    </li>
+  );
+};
 
 const EmpRow = ({
   emp,
+  depth = 0,
   checked,
   onToggle,
 }: {
   emp: Employee;
+  depth?: number;
   checked: boolean;
   onToggle: () => void;
 }) => (
   <li>
     <button
       onClick={onToggle}
-      className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left active:bg-secondary/60"
+      className="flex w-full items-center gap-2 rounded-xl py-2 text-left active:bg-secondary/60"
+      style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: 8 }}
     >
       <span
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
@@ -556,19 +666,33 @@ const EmpRow = ({
   </li>
 );
 
+const findDeptInTree = (
+  id: string,
+  list: Department[] = ALL_DEPTS,
+): Department | undefined => {
+  for (const d of list) {
+    if (d.id === id) return d;
+    if (d.children) {
+      const found = findDeptInTree(id, d.children);
+      if (found) return found;
+    }
+  }
+  return undefined;
+};
+
 const SearchResults = ({
   keyword,
   depts,
   emps,
   draft,
-  onToggleDept,
+  onToggleDeptSubtree,
   onToggleEmp,
 }: {
   keyword: string;
   depts: Department[];
   emps: Employee[];
   draft: AudienceSelection;
-  onToggleDept: (id: string) => void;
+  onToggleDeptSubtree: (dept: Department) => void;
   onToggleEmp: (id: string) => void;
 }) => {
   if (!depts.length && !emps.length) {
@@ -586,14 +710,17 @@ const SearchResults = ({
             部门 · {depts.length}
           </div>
           <ul className="space-y-0.5">
-            {depts.map((d) => (
-              <DeptRow
-                key={d.id}
-                dept={d}
-                checked={draft.deptIds.includes(d.id)}
-                onToggle={() => onToggleDept(d.id)}
-              />
-            ))}
+            {depts.map((d) => {
+              const full = findDeptInTree(d.id) ?? d;
+              return (
+                <DeptRow
+                  key={d.id}
+                  dept={full}
+                  draft={draft}
+                  onToggleDeptSubtree={onToggleDeptSubtree}
+                />
+              );
+            })}
           </ul>
         </div>
       )}
