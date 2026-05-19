@@ -107,7 +107,13 @@ export const careModuleList: CareModule[] = [
   careModules.workload,
 ];
 
-/** 方案有效日期 (生日关怀等) */
+/** 支持有效日期步骤的关怀类型 */
+export const careTypesWithValidDate: CareType[] = ["birthday", "festival"];
+
+export const hasValidDateStep = (type: CareType) =>
+  careTypesWithValidDate.includes(type);
+
+/** 方案有效日期 (生日/节日关怀等) */
 export type ValidDateRange = {
   mode: "permanent" | "year" | "custom";
   start?: string; // YYYY-MM-DD
@@ -170,7 +176,7 @@ export type CareRule = {
   points: number;
   enabled: boolean;
   reached: number; // 已触达人次
-  /** 生日关怀: 有效日期(列表展示) */
+  /** 有效日期(列表展示, 生日/节日关怀) */
   validDateRange?: ValidDateRange;
   /** 可选: 保存表单草稿, 编辑时完整还原 */
   formData?: CareRuleFormData;
@@ -199,6 +205,7 @@ export const sampleRules: CareRule[] = [
     points: 100,
     enabled: true,
     reached: 1286,
+    validDateRange: { mode: "year" },
   },
   {
     id: "r3",

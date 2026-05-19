@@ -28,6 +28,7 @@ import {
   type CareRule,
   type CareRuleFormData,
   defaultValidDateRange,
+  hasValidDateStep,
   defaultWorkloadTrigger,
   summarizeValidDate,
   summarizeWorkload,
@@ -245,8 +246,7 @@ const CareCreateRule = () => {
       workloadTrigger:
         moduleType === "workload" ? workloadTrigger : undefined,
       weatherTrigger: moduleType === "weather" ? weatherTrigger : undefined,
-      validDateRange:
-        moduleType === "birthday" ? validDateRange : undefined,
+      validDateRange: hasValidDateStep(moduleType) ? validDateRange : undefined,
     };
 
     const rule: CareRule = {
@@ -260,7 +260,7 @@ const CareCreateRule = () => {
       enabled: existingRule?.enabled ?? true,
       reached: existingRule?.reached ?? 0,
       formData,
-      ...(moduleType === "birthday" ? { validDateRange } : {}),
+      ...(hasValidDateStep(moduleType) ? { validDateRange } : {}),
     };
 
     upsertCareRule(rule);
@@ -490,10 +490,10 @@ const CareCreateRule = () => {
                 }
               />
 
-              {/* STEP 有效日期 (仅生日关怀) */}
-              {moduleType === "birthday" && (
+              {/* STEP 有效日期 (生日/节日关怀) */}
+              {hasValidDateStep(moduleType) && (
                 <TimelineStep
-                  step="04"
+                  step={moduleType === "festival" ? "05" : "04"}
                   title="有效日期"
                   icon={CalendarRange}
                   colorVar="--cat-5"
@@ -525,7 +525,13 @@ const CareCreateRule = () => {
               {/* STEP 积分(慰问/奖励) */}
               {hasPoints && (
                 <TimelineStep
-                  step={moduleType === "festival" ? "05" : moduleType === "birthday" ? "05" : "04"}
+                  step={
+                    moduleType === "festival"
+                      ? "06"
+                      : moduleType === "birthday"
+                        ? "05"
+                        : "04"
+                  }
                   title={pointInfo.name}
                   icon={Coins}
                   colorVar="--cat-1"

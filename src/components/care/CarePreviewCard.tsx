@@ -92,6 +92,8 @@ type Props = {
   /** compact = 用于列表的紧凑展示(隐藏底部 CTA & 福利栏) */
   compact?: boolean;
   timeLabel?: string;
+  /** 是否显示底部「稍后」按钮 */
+  showLaterButton?: boolean;
 };
 
 export const CarePreviewCard = ({
@@ -102,9 +104,11 @@ export const CarePreviewCard = ({
   hasPoints,
   compact = false,
   timeLabel = "刚刚",
+  showLaterButton = true,
 }: Props) => {
   const cfg = previewConfig[moduleType];
   const Icon = cfg.icon;
+  const showLater = showLaterButton && moduleType !== "birthday";
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft">
@@ -214,18 +218,26 @@ export const CarePreviewCard = ({
       )}
 
       {!compact && (
-        <div className="flex items-center gap-2 border-t border-border/50 px-3 py-2">
+        <div
+          className={`flex items-center border-t border-border/50 px-3 py-2 ${
+            showLater ? "gap-2" : ""
+          }`}
+        >
           <button
-            className="flex-1 rounded-full py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm"
+            className={`rounded-full py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm ${
+              showLater ? "flex-1" : "w-full"
+            }`}
             style={{
               background: `linear-gradient(135deg, ${cfg.gradientFrom}, ${cfg.gradientTo})`,
             }}
           >
             {cfg.ctaPrimary}
           </button>
-          <button className="rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-            稍后
-          </button>
+          {showLater && (
+            <button className="rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+              稍后
+            </button>
+          )}
         </div>
       )}
     </div>

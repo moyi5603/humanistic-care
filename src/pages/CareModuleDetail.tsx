@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import {
   careModules,
   formatValidDateForList,
+  hasValidDateStep,
   type CareType,
   type CareRule,
 } from "@/data/humanityCare";
@@ -277,7 +278,7 @@ const RuleCard = ({
             <span className="truncate max-w-[55%]">{rule.audience}</span>
             <span className="shrink-0">· {rule.triggerTime}</span>
           </p>
-          {moduleType === "birthday" && (
+          {hasValidDateStep(moduleType) && (
             <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
               <CalendarRange className="h-3 w-3 shrink-0 opacity-70" />
               <span className="truncate">
