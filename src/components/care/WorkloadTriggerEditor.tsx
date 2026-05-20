@@ -11,6 +11,7 @@ import {
   type WorkloadTriggerState,
   type WorkloadTriggerKey,
 } from "@/data/humanityCare";
+import { WorkloadTriggerValuePanel } from "@/components/care/WorkloadTriggerValuePanel";
 
 type Props = {
   value: WorkloadTriggerState;
@@ -35,7 +36,6 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
     },
   );
 
-  // 重新打开时同步外部值
   useEffect(() => {
     if (open) {
       setActiveKey(value.key);
@@ -45,7 +45,6 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
 
   const activeCat = workloadTriggerCategories.find((c) => c.key === activeKey)!;
   const activeValue = valueMap[activeKey];
-  const isPreset = activeCat.presets.includes(activeValue);
 
   const setActiveValue = (v: number | string) => {
     setValueMap((m) => ({ ...m, [activeKey]: v }));
@@ -70,7 +69,6 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
             </p>
           </SheetHeader>
 
-          {/* Tabs */}
           <div className="mt-3 px-4">
             <div className="flex gap-1 overflow-x-auto rounded-xl bg-secondary/60 p-1 scrollbar-hide">
               {workloadTriggerCategories.map((cat) => {
@@ -95,86 +93,12 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
             </div>
           </div>
 
-          {/* Active panel */}
           <div className="flex-1 overflow-y-auto px-4 py-4 scrollbar-hide">
-            <div className="rounded-2xl border border-primary/40 bg-card p-4 shadow-soft">
-              <div className="text-center text-[11px] text-muted-foreground">
-                {activeCat.desc}
-              </div>
-              <div className="mt-2 text-center text-2xl font-bold text-foreground">
-                {activeCat.formatValue(activeValue)}
-              </div>
-
-              {/* presets */}
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {activeCat.presets.map((p) => {
-                  const selected = activeValue === p;
-                  return (
-                    <button
-                      key={String(p)}
-                      type="button"
-                      onClick={() => setActiveValue(p)}
-                      className={`flex-1 min-w-[60px] rounded-lg border px-2 py-2 text-xs font-medium transition-base ${
-                        selected
-                          ? "border-transparent bg-primary text-primary-foreground shadow-glow"
-                          : "border-border bg-background text-foreground active:scale-95"
-                      }`}
-                    >
-                      {p}
-                      {activeCat.unit !== "时刻" && (
-                        <span
-                          className={`ml-0.5 text-[10px] ${
-                            selected ? "opacity-80" : "text-muted-foreground"
-                          }`}
-                        >
-                          {activeCat.unit === "小时" ? "h" : activeCat.unit}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* custom input */}
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 py-2">
-                <span className="text-xs text-muted-foreground">自定义</span>
-                {activeCat.inputType === "number" ? (
-                  <input
-                    type="number"
-                    min={activeCat.min}
-                    max={activeCat.max}
-                    value={typeof activeValue === "number" ? activeValue : ""}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      if (Number.isNaN(n)) return;
-                      const clamped = Math.min(
-                        activeCat.max ?? n,
-                        Math.max(activeCat.min ?? n, n),
-                      );
-                      setActiveValue(clamped);
-                    }}
-                    placeholder={String(activeCat.defaultValue)}
-                    className="flex-1 bg-transparent text-right text-sm font-medium text-foreground focus:outline-none"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={String(activeValue)}
-                    onChange={(e) => setActiveValue(e.target.value)}
-                    placeholder="如 23:00 或 次日 00:30"
-                    className="flex-1 bg-transparent text-right text-sm font-medium text-foreground placeholder:text-muted-foreground focus:outline-none"
-                  />
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {activeCat.unit}
-                </span>
-              </div>
-              {!isPreset && activeCat.inputType === "number" && (
-                <p className="mt-1 text-right text-[10px] text-muted-foreground">
-                  范围 {activeCat.min}-{activeCat.max} {activeCat.unit}
-                </p>
-              )}
-            </div>
+            <WorkloadTriggerValuePanel
+              cat={activeCat}
+              value={activeValue}
+              onChange={setActiveValue}
+            />
           </div>
 
           <div className="border-t border-border p-3">

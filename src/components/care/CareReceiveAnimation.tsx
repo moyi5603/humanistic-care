@@ -134,7 +134,7 @@ const WeatherFx = () => (
   </>
 );
 
-/* ───────────────── 工作强度:月亮 + 星星 + 打车券 ───────────────── */
+/* ───────────────── 工作强度:月亮 + 星星 + 加班礼包 ───────────────── */
 const WorkloadFx = () => (
   <>
     {/* 紫蓝渐变光晕 */}
@@ -157,12 +157,12 @@ const WorkloadFx = () => (
         {i % 3 === 0 ? "⭐" : "✨"}
       </span>
     ))}
-    {/* 底部滑入的打车券 */}
+    {/* 底部滑入的加班礼包 */}
     <div className="absolute bottom-[18%] left-1/2 -translate-x-1/2 animate-[slideUpRotate_1.4s_cubic-bezier(.2,.9,.3,1.2)_forwards] rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-5 py-3 text-white shadow-2xl">
       <div className="flex items-center gap-2">
-        <span className="text-2xl">🚕</span>
+        <span className="text-2xl">🎁</span>
         <div>
-          <div className="text-xs opacity-90">夜归打车券</div>
+          <div className="text-xs opacity-90">加班礼包</div>
           <div className="text-base font-bold">+30 元</div>
         </div>
       </div>

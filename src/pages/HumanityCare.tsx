@@ -37,7 +37,7 @@ const promptGroups: { title: string; prompts: Prompt[] }[] = [
         text: "把生日祝福改成 AI 动态生成",
         type: "birthday",
         action: "new",
-        query: { template: "✨ AI 动态生成(根据员工岗位/兴趣)" },
+        query: { template: "✨ AI 动态生成" },
       },
     ],
   },

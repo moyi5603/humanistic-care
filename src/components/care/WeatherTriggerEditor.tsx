@@ -43,6 +43,12 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
   const setThreshold = (k: WeatherTriggerKey, v: number) => {
     setDraft((d) => ({ ...d, thresholds: { ...d.thresholds, [k]: v } }));
   };
+  const setMinTemp = (k: WeatherTriggerKey, v: number) => {
+    setDraft((d) => ({
+      ...d,
+      minTemps: { ...d.minTemps, [k]: v },
+    }));
+  };
   const toggleLevel = (k: WeatherTriggerKey, lvl: WarningLevel) => {
     setDraft((d) => {
       const cat = weatherTriggerCategories.find((c) => c.key === k);
@@ -113,7 +119,12 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
                     {activeCat.name}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {activeCat.desc}
+                    {activeCat.kind === "coldWave"
+                      ? activeCat.formatValue(
+                          draft.thresholds.coldWave ?? activeCat.drop.defaultValue,
+                          draft.minTemps?.coldWave ?? activeCat.minTemp.defaultValue,
+                        )
+                      : activeCat.desc}
                   </div>
                 </div>
                 <Switch
@@ -137,6 +148,16 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
                     cat={activeCat}
                     value={draft.thresholds[activeKey] ?? activeCat.defaultValue}
                     onChange={(v) => setThreshold(activeKey, v)}
+                  />
+                ) : activeCat.kind === "coldWave" ? (
+                  <ColdWaveBody
+                    cat={activeCat}
+                    drop={draft.thresholds.coldWave ?? activeCat.drop.defaultValue}
+                    minTemp={
+                      draft.minTemps?.coldWave ?? activeCat.minTemp.defaultValue
+                    }
+                    onDropChange={(v) => setThreshold("coldWave", v)}
+                    onMinTempChange={(v) => setMinTemp("coldWave", v)}
                   />
                 ) : (
                   <WarningLevelBody
@@ -164,6 +185,103 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
     </Sheet>
   );
 };
+
+const ColdWaveBody = ({
+  cat,
+  drop,
+  minTemp,
+  onDropChange,
+  onMinTempChange,
+}: {
+  cat: Extract<
+    (typeof import("@/data/humanityCare"))["weatherTriggerCategories"][number],
+    { kind: "coldWave" }
+  >;
+  drop: number;
+  minTemp: number;
+  onDropChange: (v: number) => void;
+  onMinTempChange: (v: number) => void;
+}) => (
+  <div className="space-y-4">
+    <ThresholdParamBlock
+      title="① 24 小时降温幅度"
+      param={cat.drop}
+      value={drop}
+      onChange={onDropChange}
+      compareSymbol="≥"
+    />
+    <ThresholdParamBlock
+      title="② 最低气温"
+      param={cat.minTemp}
+      value={minTemp}
+      onChange={onMinTempChange}
+      compareSymbol="≤"
+    />
+    <div className="rounded-xl bg-secondary/50 px-3 py-2.5 text-center">
+      <p className="text-[10px] text-muted-foreground">触发条件预览</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">
+        {cat.formatValue(drop, minTemp)}
+      </p>
+    </div>
+  </div>
+);
+
+const ThresholdParamBlock = ({
+  title,
+  param,
+  value,
+  onChange,
+  compareSymbol,
+}: {
+  title: string;
+  param: { presets: number[]; min: number; max: number };
+  value: number;
+  onChange: (v: number) => void;
+  compareSymbol: "≥" | "≤";
+}) => (
+  <div>
+    <p className="mb-2 text-xs font-medium text-foreground">{title}</p>
+    <div className="flex flex-wrap gap-1.5">
+      {param.presets.map((p) => {
+        const selected = value === p;
+        return (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={`flex-1 min-w-[52px] rounded-lg border px-2 py-2 text-xs font-medium transition-base ${
+              selected
+                ? "border-transparent bg-primary text-primary-foreground shadow-glow"
+                : "border-border bg-background text-foreground active:scale-95"
+            }`}
+          >
+            {compareSymbol} {p}°
+          </button>
+        );
+      })}
+    </div>
+    <div className="mt-2 flex items-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 py-2">
+      <span className="text-xs text-muted-foreground">自定义</span>
+      <input
+        type="number"
+        min={param.min}
+        max={param.max}
+        step={1}
+        value={value}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isNaN(n)) return;
+          onChange(Math.min(param.max, Math.max(param.min, n)));
+        }}
+        className="flex-1 bg-transparent text-right text-sm font-medium text-foreground focus:outline-none"
+      />
+      <span className="text-xs text-muted-foreground">℃</span>
+    </div>
+    <p className="mt-1 text-right text-[10px] text-muted-foreground">
+      范围 {param.min} ~ {param.max} ℃
+    </p>
+  </div>
+);
 
 const ThresholdBody = ({
   cat,

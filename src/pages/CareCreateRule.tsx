@@ -36,11 +36,24 @@ import {
   type WorkloadTriggerState,
   defaultWeatherTrigger,
   summarizeWeather,
+  summarizeWeatherContent,
+  countWeatherContentReady,
+  firstWeatherPreviewContent,
+  weatherTriggerCategories,
+  type WeatherContentMap,
   type WeatherTriggerState,
+  AI_CARE_CONTENT_MARKER,
+  aiCareContentVariants,
+  isAiCareTemplate,
+  normalizeWeatherContentEntry,
+  resolveWeatherContent,
 } from "@/data/humanityCare";
+import { Textarea } from "@/components/ui/textarea";
 import { getCareRule, upsertCareRule } from "@/data/careRulesStore";
 import { WorkloadTriggerEditor } from "@/components/care/WorkloadTriggerEditor";
 import { WeatherTriggerEditor } from "@/components/care/WeatherTriggerEditor";
+import { WeatherCareContentEditor } from "@/components/care/WeatherCareContentEditor";
+import { CareContentAiPanel } from "@/components/care/CareContentAiPanel";
 import {
   Sheet,
   SheetContent,
@@ -156,12 +169,19 @@ const CareCreateRule = () => {
         ? festivalTriggerOptions[0]
         : mod.triggers[0]),
   );
-  const [template, setTemplate] = useState(
-    () => existingRule?.template ?? prefill.template ?? mod.templates[0],
-  );
-  const [customContent, setCustomContent] = useState(
-    () => existingRule?.formData?.customContent ?? "",
-  );
+  const [template, setTemplate] = useState(() => {
+    const t = existingRule?.template ?? prefill.template;
+    if (t && !isAiCareTemplate(t)) return t;
+    return AI_CARE_CONTENT_MARKER;
+  });
+  const [customContent, setCustomContent] = useState(() => {
+    if (existingRule?.formData?.customContent?.trim()) {
+      return existingRule.formData.customContent;
+    }
+    const t = existingRule?.template;
+    if (t && !isAiCareTemplate(t)) return t;
+    return "";
+  });
   const [previewOpen, setPreviewOpen] = useState(false);
   const [points, setPoints] = useState<number>(() => {
     if (existingRule) return existingRule.points;
@@ -175,7 +195,28 @@ const CareCreateRule = () => {
   const [weatherTrigger, setWeatherTrigger] = useState<WeatherTriggerState>(
     () => existingRule?.formData?.weatherTrigger ?? defaultWeatherTrigger,
   );
+  const [weatherContents, setWeatherContents] = useState<WeatherContentMap>(() => {
+    const raw = existingRule?.formData?.weatherContents;
+    if (raw) {
+      const migrated: WeatherContentMap = {};
+      for (const cat of weatherTriggerCategories) {
+        const entry = normalizeWeatherContentEntry(raw[cat.key]);
+        if (entry) migrated[cat.key] = entry;
+      }
+      if (Object.keys(migrated).length > 0) return migrated;
+    }
+    if (existingRule?.type === "weather") {
+      const legacy =
+        existingRule.formData?.customContent?.trim() || existingRule.template;
+      if (legacy && !isAiCareTemplate(legacy)) {
+        return { extremeHeat: { selected: legacy } };
+      }
+    }
+    return {};
+  });
   const weatherSummary = summarizeWeather(weatherTrigger);
+  const weatherContentSummary = summarizeWeatherContent(weatherTrigger, weatherContents);
+  const weatherContentReadyCount = countWeatherContentReady(weatherTrigger, weatherContents);
   const [validDateRange, setValidDateRange] = useState<ValidDateRange>(
     () =>
       existingRule?.formData?.validDateRange ?? defaultValidDateRange(),
@@ -189,7 +230,7 @@ const CareCreateRule = () => {
 
   // 内容编辑 & 积分编辑的 sheet 草稿
   const [contentOpen, setContentOpen] = useState(false);
-  const [contentDraft, setContentDraft] = useState({ template, custom: customContent });
+  const [contentDraft, setContentDraft] = useState(customContent);
   const [pointsOpen, setPointsOpen] = useState(false);
   const [pointsDraft, setPointsDraft] = useState(points);
 
@@ -210,12 +251,20 @@ const CareCreateRule = () => {
   };
 
   const openContent = () => {
-    setContentDraft({ template, custom: customContent });
+    setContentDraft(customContent);
     setContentOpen(true);
   };
+  const handleAiContentSelect = (text: string) => {
+    setContentDraft(text);
+  };
   const confirmContent = () => {
-    setTemplate(contentDraft.template);
-    setCustomContent(contentDraft.custom);
+    const final = contentDraft.trim();
+    if (!final) {
+      toast.error("请选择一条 AI 生成的关怀文案，或填写自定义内容");
+      return;
+    }
+    setTemplate(AI_CARE_CONTENT_MARKER);
+    setCustomContent(final);
     setContentOpen(false);
   };
   const openPoints = () => {
@@ -235,17 +284,43 @@ const CareCreateRule = () => {
   };
 
   const handleSave = () => {
+    if (moduleType !== "weather" && !customContent.trim()) {
+      toast.error("请选择一条 AI 生成的关怀文案");
+      return;
+    }
+
+    if (moduleType === "weather") {
+      const enabled = weatherTriggerCategories.filter((c) => weatherTrigger.enabled[c.key]);
+      if (enabled.length === 0) {
+        toast.error("请至少启用一种极端天气触发条件");
+        return;
+      }
+      const missing = enabled.filter(
+        (c) => !resolveWeatherContent(weatherContents[c.key]),
+      );
+      if (missing.length > 0) {
+        toast.error(
+          `请为已启用的天气场景配置触达文案：${missing.map((c) => c.short).join("、")}`,
+        );
+        return;
+      }
+    }
+
     const audienceText =
       audienceSummary === "请选择关怀对象" ? "全公司员工" : audienceSummary;
-    const content = customContent.trim() || template;
+    const content =
+      moduleType === "weather"
+        ? weatherContentSummary.text
+        : customContent.trim();
     const formData: CareRuleFormData = {
       audience,
       trigger,
       festival: moduleType === "festival" ? festival : undefined,
-      customContent,
+      customContent: moduleType === "weather" ? undefined : customContent,
       workloadTrigger:
         moduleType === "workload" ? workloadTrigger : undefined,
       weatherTrigger: moduleType === "weather" ? weatherTrigger : undefined,
+      weatherContents: moduleType === "weather" ? weatherContents : undefined,
       validDateRange: hasValidDateStep(moduleType) ? validDateRange : undefined,
     };
 
@@ -462,30 +537,49 @@ const CareCreateRule = () => {
                 icon={Heart}
                 colorVar={mod.colorVar}
                 editTrigger={
-                  <button
-                    type="button"
-                    aria-label="编辑"
-                    onClick={openContent}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-base active:scale-90 hover:bg-secondary"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                  </button>
+                  moduleType === "weather" ? undefined : (
+                    <button
+                      type="button"
+                      aria-label="编辑"
+                      onClick={openContent}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-base active:scale-90 hover:bg-secondary"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                  )
                 }
                 summary={
-                  <SummaryRow
-                    icon={<Heart className="h-3.5 w-3.5 text-muted-foreground" />}
-                    text={customContent.trim() || template}
-                    multiline
-                    onClick={openContent}
-                  />
+                  moduleType === "weather" ? (
+                    <WeatherCareContentEditor
+                      trigger={weatherTrigger}
+                      contents={weatherContents}
+                      onChange={setWeatherContents}
+                    />
+                  ) : (
+                    <SummaryRow
+                      icon={<Heart className="h-3.5 w-3.5 text-muted-foreground" />}
+                      text={
+                        customContent.trim() || "请点击编辑,选择 AI 生成文案"
+                      }
+                      sub={customContent.trim() ? "AI 动态生成" : undefined}
+                      multiline
+                      onClick={openContent}
+                    />
+                  )
                 }
                 extra={
                   <button
                     type="button"
                     onClick={() => setPreviewOpen(true)}
-                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-secondary/40 py-2 text-xs font-medium text-foreground transition-base active:scale-[0.99]"
+                    disabled={
+                      moduleType === "weather" && weatherContentReadyCount === 0
+                    }
+                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-secondary/40 py-2 text-xs font-medium text-foreground transition-base active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <Eye className="h-3.5 w-3.5" /> 模拟员工查收
+                    <Eye className="h-3.5 w-3.5" />
+                    {moduleType === "weather" && weatherContentReadyCount === 0
+                      ? "请先配置至少 1 类文案后再模拟查收"
+                      : "模拟员工查收"}
                   </button>
                 }
               />
@@ -595,49 +689,28 @@ const CareCreateRule = () => {
             <SheetTitle className="text-left text-base">编辑关怀内容</SheetTitle>
           </SheetHeader>
           <div className="mt-3 space-y-3">
-            <div>
-              <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-                选择模板
-              </div>
-              <ul className="max-h-[40vh] space-y-1 overflow-y-auto scrollbar-hide">
-                {mod.templates.map((opt) => (
-                  <li key={opt}>
-                    <button
-                      onClick={() =>
-                        setContentDraft((d) => ({ ...d, template: opt }))
-                      }
-                      className={`flex w-full items-start justify-between gap-2 rounded-xl px-3 py-3 text-left text-sm transition-base ${
-                        contentDraft.template === opt
-                          ? "bg-accent text-accent-foreground"
-                          : "text-foreground active:bg-secondary"
-                      }`}
-                    >
-                      <span className="leading-relaxed">{opt}</span>
-                      {contentDraft.template === opt && (
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-                自定义内容(可选)
-              </div>
-              <textarea
-                value={contentDraft.custom}
-                onChange={(e) =>
-                  setContentDraft((d) => ({ ...d, custom: e.target.value }))
-                }
-                placeholder="填写后将覆盖模板内容…"
+            <CareContentAiPanel
+              key={contentOpen ? moduleType : "closed"}
+              pool={aiCareContentVariants[moduleType]}
+              onSelect={handleAiContentSelect}
+            />
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                自定义内容
+              </label>
+              <Textarea
+                value={contentDraft}
+                onChange={(e) => setContentDraft(e.target.value)}
+                placeholder="选择上方 AI 方案后将自动填入，可自行修改"
                 rows={3}
-                className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="resize-none text-sm"
               />
             </div>
             <button
+              type="button"
               onClick={confirmContent}
-              className="w-full rounded-full gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-base active:scale-95"
+              disabled={!contentDraft.trim()}
+              className="w-full rounded-full gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-base active:scale-95 disabled:opacity-40"
             >
               确定
             </button>
@@ -761,7 +834,11 @@ const CareCreateRule = () => {
             <div className="min-h-0 flex-1">
               <CareReceiveSimulator
                 moduleType={moduleType}
-                content={customContent.trim() || template}
+                content={
+                  moduleType === "weather"
+                    ? firstWeatherPreviewContent(weatherTrigger, weatherContents)
+                    : customContent.trim()
+                }
                 points={points}
                 pointName={pointInfo.name}
                 hasPoints={hasPoints}

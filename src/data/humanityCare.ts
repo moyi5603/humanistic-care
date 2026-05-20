@@ -41,11 +41,7 @@ export const careModules: Record<CareType, CareModule> = {
     icon: Cake,
     colorVar: "--cat-7",
     triggers: ["生日当天 09:00", "生日前 1 天 18:00"],
-    templates: [
-      "🎂 生日快乐!愿新的一岁充满惊喜与成长",
-      "🎉 祝你生日快乐!公司为你准备了一份小礼物",
-      "✨ AI 动态生成(根据员工岗位/兴趣)",
-    ],
+    templates: ["✨ AI 动态生成"],
     consumeHint: "蛋糕券 / 电影票 福利商城",
   },
   festival: {
@@ -56,11 +52,7 @@ export const careModules: Record<CareType, CareModule> = {
     icon: PartyPopper,
     colorVar: "--cat-4",
     triggers: ["春节", "端午节", "中秋节", "国庆节", "元旦", "妇女节", "劳动节"],
-    templates: [
-      "🧧 新春快乐,阖家团圆",
-      "🥮 中秋月圆人团圆,公司送上节日福利",
-      "✨ AI 动态生成(贴合节日氛围与文化)",
-    ],
+    templates: ["✨ AI 动态生成"],
     consumeHint: "节日礼包 / 节日商城",
   },
   weather: {
@@ -71,11 +63,7 @@ export const careModules: Record<CareType, CareModule> = {
     icon: CloudSun,
     colorVar: "--cat-9",
     triggers: ["高温 ≥ 35℃", "暴雨 / 雷暴", "暴雪 / 寒潮 ≤ -5℃", "空气质量 AQI ≥ 200"],
-    templates: [
-      "☔ 今日有暴雨,出门请带好雨具,注意安全",
-      "🥵 高温预警!请注意防暑降温,多补水",
-      "❄ 寒潮来袭,注意添衣保暖",
-    ],
+    templates: ["✨ AI 动态生成"],
     consumeHint: "无消费引导",
   },
   workload: {
@@ -91,11 +79,7 @@ export const careModules: Record<CareType, CareModule> = {
       "周工时 ≥ 60h",
       "凌晨 0 点后仍在线",
     ],
-    templates: [
-      "🌙 辛苦了!夜深了请注意休息,公司为你准备了打车券",
-      "💪 看到你最近很拼,公司给你加 50 积分,记得照顾好自己",
-      "✨ AI 动态生成(根据加班场景温情慰问)",
-    ],
+    templates: ["✨ AI 动态生成"],
     consumeHint: "打车券 / 夜宵福利",
   },
 };
@@ -108,12 +92,16 @@ export const careModuleList: CareModule[] = [
 ];
 
 /** 支持有效日期步骤的关怀类型 */
-export const careTypesWithValidDate: CareType[] = ["birthday", "festival"];
+export const careTypesWithValidDate: CareType[] = [
+  "birthday",
+  "festival",
+  "weather",
+];
 
 export const hasValidDateStep = (type: CareType) =>
   careTypesWithValidDate.includes(type);
 
-/** 方案有效日期 (生日/节日关怀等) */
+/** 方案有效日期 (生日/节日/天气关怀等) */
 export type ValidDateRange = {
   mode: "permanent" | "year" | "custom";
   start?: string; // YYYY-MM-DD
@@ -163,6 +151,8 @@ export type CareRuleFormData = {
   customContent?: string;
   workloadTrigger?: WorkloadTriggerState;
   weatherTrigger?: WeatherTriggerState;
+  /** 天气关怀：按极端天气类型配置触达文案 */
+  weatherContents?: WeatherContentMap;
   validDateRange?: ValidDateRange;
 };
 
@@ -176,7 +166,7 @@ export type CareRule = {
   points: number;
   enabled: boolean;
   reached: number; // 已触达人次
-  /** 有效日期(列表展示, 生日/节日关怀) */
+  /** 有效日期(列表展示) */
   validDateRange?: ValidDateRange;
   /** 可选: 保存表单草稿, 编辑时完整还原 */
   formData?: CareRuleFormData;
@@ -189,7 +179,7 @@ export const sampleRules: CareRule[] = [
     name: "全员生日祝福",
     audience: "全公司员工",
     triggerTime: "生日当天 09:00",
-    template: "🎂 生日快乐!愿新的一岁充满惊喜与成长",
+    template: "🎂 生日快乐!愿新的一岁充满惊喜与成长,公司为你准备了专属礼遇",
     points: 50,
     enabled: true,
     reached: 312,
@@ -199,9 +189,9 @@ export const sampleRules: CareRule[] = [
     id: "r2",
     type: "festival",
     name: "中秋节关怀",
-    audience: "全员 + 外派员工",
+    audience: "全公司员工",
     triggerTime: "节日前 1 天 18:00",
-    template: "🥮 中秋月圆人团圆,公司送上节日福利",
+    template: "🧧 节日快乐,阖家团圆,愿你温暖如常",
     points: 100,
     enabled: true,
     reached: 1286,
@@ -211,20 +201,45 @@ export const sampleRules: CareRule[] = [
     id: "r3",
     type: "weather",
     name: "高温预警关怀",
-    audience: "户外岗位 86 人",
-    triggerTime: "每日 07:30",
-    template: "🥵 高温预警!请注意防暑降温,多补水",
+    audience: "全公司员工",
+    triggerTime: "高温 ≥ 37℃",
+    template: "已配置 1/1 类场景文案",
     points: 0,
     enabled: true,
     reached: 24,
+    validDateRange: { mode: "year" },
+    formData: {
+      audience: { all: false, deptIds: [], empIds: [], tags: [] },
+      weatherTrigger: {
+        enabled: {
+          extremeHeat: true,
+          extremeCold: false,
+          coldWave: false,
+          rainstorm: false,
+          snowstorm: false,
+          typhoon: false,
+          sandstorm: false,
+          haze: false,
+        },
+        thresholds: { extremeHeat: 37 },
+        minTemps: {},
+        levels: {},
+      },
+      weatherContents: {
+        extremeHeat: {
+          selected: "🥵 高温来袭!请注意防暑降温,多补水,减少户外暴晒",
+        },
+      },
+      validDateRange: { mode: "year" },
+    },
   },
   {
     id: "r4",
     type: "workload",
     name: "深夜加班慰问",
-    audience: "研发中心 320 人",
+    audience: "全公司员工",
     triggerTime: "实时触发 (0:00 后在线)",
-    template: "🌙 辛苦了!夜深了请注意休息,打车券已发放",
+    template: "🌙 辛苦了!夜深了请注意休息,公司为你准备了加班礼包",
     points: 30,
     enabled: true,
     reached: 47,
@@ -396,6 +411,32 @@ export type WeatherTriggerCategory =
       shortLabel: (v: number) => string;
     }
   | {
+      key: "coldWave";
+      kind: "coldWave";
+      name: string;
+      short: string;
+      desc: string;
+      tip: string;
+      icon: LucideIcon;
+      colorVar: string;
+      drop: {
+        label: string;
+        presets: number[];
+        defaultValue: number;
+        min: number;
+        max: number;
+      };
+      minTemp: {
+        label: string;
+        presets: number[];
+        defaultValue: number;
+        min: number;
+        max: number;
+      };
+      formatValue: (drop: number, minTemp: number) => string;
+      shortLabel: (drop: number, minTemp: number) => string;
+    }
+  | {
       key: WeatherTriggerKey;
       kind: "warning";
       name: string;
@@ -453,21 +494,29 @@ export const weatherTriggerCategories: WeatherTriggerCategory[] = [
   },
   {
     key: "coldWave",
-    kind: "threshold",
+    kind: "coldWave",
     name: "寒潮降温",
     short: "寒潮",
-    desc: "24h降温≥8℃且最低温≤4℃",
-    tip: "24h降温≥8℃且最低温≤4℃,两项同时满足时触发",
+    desc: "24h 降温幅度与最低气温同时满足时触发",
+    tip: "国标寒潮常参考 24h 降温 ≥ 8℃、最低温 ≤ 4℃；两项同时满足才触发,可按城市气候调整",
     icon: Snowflake,
     colorVar: "--cat-3",
-    unit: "℃",
-    compare: "gte",
-    presets: [6, 8, 10, 12],
-    defaultValue: 8,
-    min: 4,
-    max: 20,
-    formatValue: (v) => `24h降温≥${v}℃且最低温≤4℃`,
-    shortLabel: (v) => `24h降温≥${v}℃且最低温≤4℃`,
+    drop: {
+      label: "24 小时降温幅度",
+      presets: [6, 8, 10, 12],
+      defaultValue: 8,
+      min: 4,
+      max: 20,
+    },
+    minTemp: {
+      label: "最低气温",
+      presets: [0, 2, 4, 6],
+      defaultValue: 4,
+      min: -10,
+      max: 10,
+    },
+    formatValue: (drop, minTemp) => `24h降温≥${drop}℃且最低温≤${minTemp}℃`,
+    shortLabel: (drop, minTemp) => `24h降温≥${drop}℃且最低温≤${minTemp}℃`,
   },
   {
     key: "rainstorm",
@@ -544,8 +593,23 @@ export const weatherTriggerCategories: WeatherTriggerCategory[] = [
 
 export type WeatherTriggerState = {
   enabled: Partial<Record<WeatherTriggerKey, boolean>>;
+  /** 单阈值类天气；寒潮时存 24h 降温幅度 */
   thresholds: Partial<Record<WeatherTriggerKey, number>>;
+  /** 寒潮最低气温 ≤ 该值 */
+  minTemps?: Partial<Record<WeatherTriggerKey, number>>;
   levels: Partial<Record<WeatherTriggerKey, WarningLevel[]>>;
+};
+
+export const getColdWaveDrop = (state: WeatherTriggerState) => {
+  const cat = weatherTriggerCategories.find((c) => c.key === "coldWave");
+  if (!cat || cat.kind !== "coldWave") return 8;
+  return state.thresholds.coldWave ?? cat.drop.defaultValue;
+};
+
+export const getColdWaveMinTemp = (state: WeatherTriggerState) => {
+  const cat = weatherTriggerCategories.find((c) => c.key === "coldWave");
+  if (!cat || cat.kind !== "coldWave") return 4;
+  return state.minTemps?.coldWave ?? cat.minTemp.defaultValue;
 };
 
 export const defaultWeatherTrigger: WeatherTriggerState = {
@@ -559,10 +623,12 @@ export const defaultWeatherTrigger: WeatherTriggerState = {
   thresholds: weatherTriggerCategories.reduce(
     (acc, c) => {
       if (c.kind === "threshold") acc[c.key] = c.defaultValue;
+      if (c.kind === "coldWave") acc[c.key] = c.drop.defaultValue;
       return acc;
     },
     {} as Record<WeatherTriggerKey, number>,
   ),
+  minTemps: { coldWave: 4 },
   levels: weatherTriggerCategories.reduce(
     (acc, c) => {
       if (c.kind === "warning") acc[c.key] = [...c.defaultLevels];
@@ -581,6 +647,10 @@ export const summarizeWeather = (
     if (cat.kind === "threshold") {
       const v = state.thresholds[cat.key] ?? cat.defaultValue;
       parts.push(cat.shortLabel(v));
+    } else if (cat.kind === "coldWave") {
+      parts.push(
+        cat.shortLabel(getColdWaveDrop(state), getColdWaveMinTemp(state)),
+      );
     } else {
       const l = state.levels[cat.key] ?? cat.defaultLevels;
       if (l.length > 0) parts.push(cat.shortLabel(l));
@@ -594,4 +664,269 @@ export const summarizeWeather = (
     text: parts.slice(0, 2).join(" · ") + (parts.length > 2 ? ` 等 ${enabledCount} 项` : ""),
     sub: `共启用 ${enabledCount} 项天气触发 · 满足即触达`,
   };
+};
+
+/* ============== 天气关怀 · 分场景触达文案 ============== */
+
+export const AI_CARE_CONTENT_MARKER = "✨ AI 动态生成";
+
+export type WeatherContentEntry = { selected: string; custom?: string };
+export type WeatherContentMap = Partial<Record<WeatherTriggerKey, WeatherContentEntry>>;
+
+type LegacyWeatherContentEntry = {
+  template?: string;
+  custom?: string;
+  content?: string;
+  selected?: string;
+};
+
+export const isAiCareTemplate = (text: string) => text.includes("AI 动态生成");
+
+/** @deprecated 使用 isAiCareTemplate */
+export const isAiWeatherTemplate = isAiCareTemplate;
+
+/** 兼容旧数据 template/custom */
+export const normalizeWeatherContentEntry = (
+  entry?: LegacyWeatherContentEntry | null,
+): WeatherContentEntry | undefined => {
+  if (!entry) return undefined;
+  if (entry.selected?.trim()) {
+    return {
+      selected: entry.selected.trim(),
+      custom: entry.custom?.trim() || undefined,
+    };
+  }
+  if (entry.content?.trim()) {
+    return { selected: entry.content.trim() };
+  }
+  const legacyCustom = entry.custom?.trim();
+  const legacyTemplate = entry.template?.trim();
+  if (legacyCustom) {
+    return {
+      selected: legacyTemplate && !isAiCareTemplate(legacyTemplate) ? legacyTemplate : legacyCustom,
+      custom: legacyTemplate && !isAiCareTemplate(legacyTemplate) ? legacyCustom : undefined,
+    };
+  }
+  const text = legacyTemplate?.trim();
+  if (!text || isAiCareTemplate(text)) return undefined;
+  return { selected: text };
+};
+
+/** 最终触达文案：自定义优先，否则为 AI 选中项 */
+export const resolveWeatherContent = (entry?: WeatherContentEntry) =>
+  entry?.custom?.trim() || entry?.selected?.trim() || "";
+
+/** 各关怀类型 AI 文案池 */
+export const aiCareContentVariants: Record<CareType, readonly string[]> = {
+  birthday: [
+    "🎂 生日快乐!愿新的一岁充满惊喜与成长,公司为你准备了专属礼遇",
+    "🎉 祝你生日快乐!劳逸结合,万事顺意",
+    "✨ 生日快乐!感谢你的付出,愿你被温柔以待",
+    "🎈 生日快乐!愿你新一岁健康顺遂,笑容常在",
+    "💐 生日快乐!公司祝你心想事成,前程似锦",
+    "🌟 生日快乐!愿所有美好如期而至",
+  ],
+  festival: [
+    "🧧 节日快乐,阖家团圆,愿你温暖如常",
+    "🎁 节日将至,公司为你送上节日礼包与祝福",
+    "✨ 节日快乐!愿美好与你常相伴",
+    "🎊 节日快乐!感谢相伴,愿你幸福安康",
+    "🏮 佳节安康,愿你和家人共享团圆时光",
+    "💝 节日快乐!公司与你共度美好佳节",
+  ],
+  weather: [
+    "☔ 出行请关注天气变化,注意安全",
+    "🌤 今日天气多变,请合理安排行程",
+    "✨ 天气提醒已更新,请查收",
+    "🌡 请关注气温变化,做好防护",
+    "💨 大风降温,注意添衣保暖",
+    "☀ 晴热天气,注意防暑补水",
+  ],
+  workload: [
+    "🌙 辛苦了!夜深了请注意休息,公司为你准备了加班礼包",
+    "💪 看到你最近很拼,记得照顾好自己,加班礼包已备好",
+    "✨ 工作再忙也要休息,领取加班礼包放松一下",
+    "🫶 辛苦了!公司感谢你的付出,请领取加班礼包",
+    "☕ 加班辛苦了,注意休息,礼包已为你准备好",
+    "🌃 夜深了,早点休息,加班礼包记得领取",
+  ],
+};
+
+/** 各极端天气场景 AI 文案池 */
+export const aiWeatherContentVariants: Record<WeatherTriggerKey, readonly string[]> = {
+  extremeHeat: [
+    "🥵 高温来袭!请注意防暑降温,多补水,减少户外暴晒",
+    "☀ 今日高温,建议错峰出行,办公室备好饮用水",
+    "✨ 酷暑提醒:注意防暑,照顾好自己",
+    "🌡 气温较高,户外作业请做好防暑措施",
+    "💧 高温天请多补水,避免长时间暴晒",
+    "🏖 炎热天气,注意防暑降温与安全",
+  ],
+  extremeCold: [
+    "❄ 低温预警,注意保暖防冻,户外作业请加强防护",
+    "🧊 气温较低,出门请添衣,注意防寒",
+    "✨ 低温提醒:注意保暖,安全通勤",
+    "🧣 寒冷天气,请做好保暖,关注身体",
+    "🌨 低温来袭,减少不必要户外停留",
+    "☕ 天寒地冻,注意添衣保暖",
+  ],
+  coldWave: [
+    "🧣 寒潮来袭,气温骤降,请注意添衣保暖",
+    "❄ 寒潮影响,合理安排出行,注意防寒",
+    "✨ 寒潮提醒:添衣保暖,关注家人健康",
+    "🌬 气温大幅下降,请加强防寒措施",
+    "🧥 寒潮天气,出门务必做好保暖",
+    "💨 降温明显,注意预防感冒",
+  ],
+  rainstorm: [
+    "☔ 暴雨天气,出门请带好雨具,注意交通安全",
+    "🌧 降雨较大,建议错峰出行,远离积水路段",
+    "✨ 暴雨提醒:注意安全,减少不必要外出",
+    "💧 强降雨来袭,注意出行安全",
+    "🌊 路面积水,驾车请减速慢行",
+    "☂️ 暴雨预警,非必要不外出",
+  ],
+  snowstorm: [
+    "🌨 暴雪预警,路面湿滑,出行请注意安全",
+    "⛄ 降雪天气,减速慢行,注意防滑",
+    "✨ 暴雪提醒:减少外出,注意保暖与安全",
+    "❄ 大雪天气,注意防寒与出行安全",
+    "🧤 暴雪来袭,户外作业请做好防护",
+    "🏔 降雪较大,合理安排出行",
+  ],
+  typhoon: [
+    "🌀 台风影响,尽量减少外出,关好门窗",
+    "💨 台风天气,非必要不外出,注意人身安全",
+    "✨ 台风提醒:关注预警,做好防护",
+    "🌪 台风来临,请做好安全防范",
+    "🏠 关好门窗,减少户外活动",
+    "📢 关注台风动态,确保人身安全",
+  ],
+  sandstorm: [
+    "🌫 沙尘天气,建议佩戴口罩,减少户外活动",
+    "😷 能见度较低,出行请注意防护",
+    "✨ 沙尘提醒:减少外出,注意呼吸道防护",
+    "💨 沙尘来袭,户外请做好防护",
+    "🕶 空气质量差,建议减少外出",
+    "🌪 大风沙尘,注意关闭门窗",
+  ],
+  haze: [
+    "😷 空气质量较差,建议减少户外活动",
+    "🌁 霾 / 重污染,敏感人群请减少外出",
+    "✨ 空气质量提醒:佩戴口罩,注意防护",
+    "🏭 空气污染,建议减少户外运动",
+    "😷 重污染天,外出请佩戴防护口罩",
+    "🌫 能见度降低,注意出行安全",
+  ],
+};
+
+export const pickAiContentBatch = (
+  pool: readonly string[],
+  size = 3,
+): string[] => {
+  if (pool.length === 0) return Array.from({ length: size }, () => "");
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const out: string[] = [];
+  const used = new Set<string>();
+  for (const item of shuffled) {
+    if (out.length >= size) break;
+    if (!used.has(item)) {
+      out.push(item);
+      used.add(item);
+    }
+  }
+  let i = 0;
+  while (out.length < size) {
+    out.push(pool[i % pool.length]);
+    i += 1;
+  }
+  return out.slice(0, size);
+};
+
+export const pickFreshAiBatch = (
+  pool: readonly string[],
+  current: readonly string[],
+  size = 3,
+): string[] => {
+  for (let n = 0; n < 15; n += 1) {
+    const next = pickAiContentBatch(pool, size);
+    if (next.join("\x00") !== current.join("\x00")) return next;
+  }
+  return pickAiContentBatch(pool, size);
+};
+
+export type WeatherContentRowStatus = "disabled" | "pending" | "ready";
+
+export const getWeatherContentRowStatus = (
+  key: WeatherTriggerKey,
+  trigger: WeatherTriggerState,
+  contents: WeatherContentMap,
+): WeatherContentRowStatus => {
+  if (!trigger.enabled[key]) return "disabled";
+  if (!resolveWeatherContent(contents[key])) return "pending";
+  return "ready";
+};
+
+export const getWeatherThresholdLabel = (
+  key: WeatherTriggerKey,
+  state: WeatherTriggerState,
+): string => {
+  const cat = weatherTriggerCategories.find((c) => c.key === key)!;
+  if (!state.enabled[key]) return "未启用";
+  if (cat.kind === "threshold") {
+    const v = state.thresholds[key] ?? cat.defaultValue;
+    return cat.formatValue(v);
+  }
+  if (cat.kind === "coldWave") {
+    return cat.formatValue(getColdWaveDrop(state), getColdWaveMinTemp(state));
+  }
+  const levels = state.levels[key] ?? cat.defaultLevels;
+  return cat.formatValue(levels);
+};
+
+export const countWeatherContentReady = (
+  trigger: WeatherTriggerState,
+  contents: WeatherContentMap,
+) =>
+  weatherTriggerCategories.filter(
+    (c) => trigger.enabled[c.key] && resolveWeatherContent(contents[c.key]),
+  ).length;
+
+export const summarizeWeatherContent = (
+  trigger: WeatherTriggerState,
+  contents: WeatherContentMap,
+): { text: string; sub?: string } => {
+  const enabled = weatherTriggerCategories.filter((c) => trigger.enabled[c.key]);
+  if (enabled.length === 0) {
+    return { text: "未配置触达文案", sub: "请先在触发条件中启用至少 1 项" };
+  }
+  const ready = enabled.filter((c) => contents[c.key]);
+  if (ready.length === 0) {
+    return {
+      text: `已启用 ${enabled.length} 项，均未配置文案`,
+      sub: "保存前请为已启用场景配置触达文案",
+    };
+  }
+  if (ready.length === 1) {
+    return { text: resolveWeatherContent(contents[ready[0].key]) };
+  }
+  const pending = enabled.length - ready.length;
+  return {
+    text: `已配置 ${ready.length}/${enabled.length} 类场景文案`,
+    sub:
+      pending > 0
+        ? `${ready.map((c) => c.short).join(" · ")} 等 · 另有 ${pending} 类待配置`
+        : ready.map((c) => c.short).join(" · "),
+  };
+};
+
+/** 模拟查收 / 列表展示用：取第一条已配置文案 */
+export const firstWeatherPreviewContent = (
+  trigger: WeatherTriggerState,
+  contents: WeatherContentMap,
+) => {
+  const cat = weatherTriggerCategories.find(
+    (c) => trigger.enabled[c.key] && contents[c.key],
+  );
+  return cat ? resolveWeatherContent(contents[cat.key]) : "";
 };

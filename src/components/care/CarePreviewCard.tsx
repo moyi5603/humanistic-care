@@ -8,7 +8,6 @@ import {
   Snowflake,
   Wind,
   Moon,
-  Car,
   HandHeart,
   PartyPopper,
   Coins,
@@ -61,7 +60,7 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     greeting: "今日天气提醒,请注意安全",
     gradientFrom: "hsl(210 75% 55%)",
     gradientTo: "hsl(190 70% 55%)",
-    ctaPrimary: "查看详细天气",
+    ctaPrimary: "通知已收到",
     perks: [
       { label: "防晒贴士", icon: Sun, color: "--cat-1" },
       { label: "保暖建议", icon: Snowflake, color: "--cat-9" },
@@ -75,9 +74,9 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     greeting: "辛苦了,记得照顾自己",
     gradientFrom: "hsl(260 60% 55%)",
     gradientTo: "hsl(220 65% 50%)",
-    ctaPrimary: "🚕 领取打车券",
+    ctaPrimary: "🎁 领取加班礼包",
     perks: [
-      { label: "打车券", icon: Car, color: "--cat-2" },
+      { label: "加班礼包", icon: Gift, color: "--cat-2" },
       { label: "夜宵福利", icon: HandHeart, color: "--cat-7" },
     ],
   },
