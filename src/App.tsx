@@ -16,6 +16,7 @@ import DepartmentDetail from "./pages/DepartmentDetail.tsx";
 import CapabilityDetail from "./pages/CapabilityDetail.tsx";
 
 import NotFound from "./pages/NotFound.tsx";
+import WeatherCareContentPrototype from "./pages/prototype/WeatherCareContentPrototype.tsx";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,10 @@ const App = () => (
           <Route path="/colleagues/dept/:id" element={<DepartmentDetail />} />
           <Route path="/colleagues/capability/:key" element={<CapabilityDetail />} />
           <Route path="/colleagues/depts" element={<Navigate to="/colleagues/capability/dept" replace />} />
+          <Route
+            path="/prototype/weather-care-content"
+            element={<WeatherCareContentPrototype />}
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
