@@ -139,6 +139,75 @@ export const summarizeValidDate = (
 export const formatValidDateForList = (range?: ValidDateRange): string =>
   summarizeValidDate(range ?? defaultValidDateRange()).text;
 
+/** 数据统计时间范围 */
+export type StatsTimeRangePreset = "7d" | "30d" | "month" | "year" | "custom";
+
+export type StatsTimeRange = {
+  preset: StatsTimeRangePreset;
+  start?: string; // YYYY-MM-DD
+  end?: string;
+};
+
+export const defaultStatsTimeRange = (): StatsTimeRange => ({ preset: "7d" });
+
+export const formatLocalIsoDate = (d = new Date()) => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+export const summarizeStatsTimeRange = (
+  range: StatsTimeRange,
+): { text: string; sub: string } => {
+  const year = new Date().getFullYear();
+  const month = new Date().getMonth() + 1;
+  switch (range.preset) {
+    case "7d":
+      return { text: "近 7 日", sub: "最近 7 天数据" };
+    case "30d":
+      return { text: "近 30 日", sub: "最近 30 天数据" };
+    case "month":
+      return { text: `${year} 年 ${month} 月`, sub: "当月 1 日至今" };
+    case "year":
+      return { text: `${year} 本年度`, sub: `${year}/01/01 — 今天` };
+    case "custom":
+      if (range.start && range.end) {
+        return {
+          text: `${range.start} 至 ${range.end}`,
+          sub: "自定义统计区间",
+        };
+      }
+      return { text: "请设置起止日期", sub: "自定义统计区间" };
+    default:
+      return { text: "近 7 日", sub: "最近 7 天数据" };
+  }
+};
+
+/** 演示用：相对全年全量数据的折算系数 */
+export const statsTimeRangeScale = (range: StatsTimeRange): number => {
+  switch (range.preset) {
+    case "7d":
+      return 7 / 365;
+    case "30d":
+      return 30 / 365;
+    case "month": {
+      const day = new Date().getDate();
+      return Math.min(day / 365, 1);
+    }
+    case "year":
+      return 1;
+    case "custom": {
+      if (!range.start || !range.end) return 7 / 365;
+      const start = new Date(`${range.start}T00:00:00`);
+      const end = new Date(`${range.end}T00:00:00`);
+      const days =
+        Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1);
+      return Math.min(days / 365, 1);
+    }
+    default:
+      return 7 / 365;
+  }
+};
+
 /** 表单完整状态, 用于新建/编辑后回显 */
 export type CareRuleFormData = {
   audience: {

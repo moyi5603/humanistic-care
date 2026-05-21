@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -30,11 +30,19 @@ import {
 import { toast } from "sonner";
 import {
   careModules,
+  defaultStatsTimeRange,
   formatValidDateForList,
   hasValidDateStep,
+  statsTimeRangeScale,
+  summarizeStatsTimeRange,
   type CareType,
   type CareRule,
+  type StatsTimeRange,
 } from "@/data/humanityCare";
+import {
+  StatsTimeRangeBar,
+  StatsTimeRangePicker,
+} from "@/components/care/StatsTimeRangePicker";
 import {
   useCareRules,
   deleteCareRule,
@@ -61,6 +69,20 @@ const CareModuleDetail = () => {
   const totalReached = rules.reduce((acc, r) => acc + r.reached, 0);
   const totalPoints = rules.reduce((acc, r) => acc + r.points * r.reached, 0);
   const [tab, setTab] = useState<"stats" | "rules">("rules");
+  const [statsRange, setStatsRange] = useState<StatsTimeRange>(defaultStatsTimeRange);
+  const statsRangeSummary = summarizeStatsTimeRange(statsRange);
+  const rangeScale = statsTimeRangeScale(statsRange);
+
+  const scopedStats = useMemo(() => {
+    const reached = Math.max(1, Math.round(totalReached * rangeScale));
+    const points = Math.round(totalPoints * rangeScale);
+    const covered = Math.max(
+      1,
+      Math.round(1286 * Math.min(rangeScale * 2.5, 1)),
+    );
+    const checkRate = (86 + (reached % 10) * 0.6).toFixed(1);
+    return { reached, points, covered, checkRate };
+  }, [totalReached, totalPoints, rangeScale]);
 
   return (
     <>
@@ -105,18 +127,24 @@ const CareModuleDetail = () => {
 
             {/* 数据统计 Tab */}
             <TabsContent value="stats" className="mt-3 space-y-4">
+              <StatsTimeRangePicker
+                value={statsRange}
+                onChange={setStatsRange}
+                trigger={<StatsTimeRangeBar summary={statsRangeSummary} />}
+              />
+
               <div className="grid grid-cols-2 gap-2.5">
-                <StatCard icon={Bell} label="累计触达" value={totalReached.toLocaleString()} colorVar={mod.colorVar} />
-                <StatCard icon={Users} label="覆盖员工" value="1,286" colorVar="--cat-3" />
-                <StatCard icon={CheckCircle2} label="查收率" value="92.4%" colorVar="--cat-1" />
-                <StatCard icon={Coins} label={moduleType === "weather" ? "提醒次数" : `${pointLabels[moduleType]}发放`} value={moduleType === "weather" ? totalReached.toString() : totalPoints.toLocaleString()} colorVar="--cat-6" />
+                <StatCard icon={Bell} label="累计触达" value={scopedStats.reached.toLocaleString()} colorVar={mod.colorVar} />
+                <StatCard icon={Users} label="覆盖员工" value={scopedStats.covered.toLocaleString()} colorVar="--cat-3" />
+                <StatCard icon={CheckCircle2} label="查收率" value={`${scopedStats.checkRate}%`} colorVar="--cat-1" />
+                <StatCard icon={Coins} label={moduleType === "weather" ? "提醒次数" : `${pointLabels[moduleType]}发放`} value={moduleType === "weather" ? scopedStats.reached.toString() : scopedStats.points.toLocaleString()} colorVar="--cat-6" />
               </div>
 
               {/* 触达趋势图(柱状) */}
-              <TrendChart colorVar={mod.colorVar} />
+              <TrendChart colorVar={mod.colorVar} range={statsRange} />
 
               {/* 查收漏斗 */}
-              <FunnelCard colorVar={mod.colorVar} reached={totalReached} />
+              <FunnelCard colorVar={mod.colorVar} reached={scopedStats.reached} />
 
               {rules.length > 0 && (
                 <section className="rounded-2xl bg-card p-4 shadow-soft">
@@ -435,17 +463,54 @@ const StatCard = ({
   </div>
 );
 
-/** 7 日触达趋势 - 简易柱状图 */
-const TrendChart = ({ colorVar }: { colorVar: string }) => {
-  const days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-  const data = [42, 56, 38, 71, 84, 95, 63];
+const trendDemoByPreset: Record<
+  StatsTimeRange["preset"],
+  { title: string; labels: string[]; data: number[] }
+> = {
+  "7d": {
+    title: "近 7 日触达趋势",
+    labels: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+    data: [42, 56, 38, 71, 84, 95, 63],
+  },
+  "30d": {
+    title: "近 30 日触达趋势",
+    labels: ["第1周", "第2周", "第3周", "第4周", "第5周"],
+    data: [198, 224, 186, 251, 217],
+  },
+  month: {
+    title: "本月触达趋势",
+    labels: ["第1周", "第2周", "第3周", "第4周"],
+    data: [156, 189, 172, 203],
+  },
+  year: {
+    title: "本年度触达趋势",
+    labels: ["1月", "2月", "3月", "4月", "5月", "6月"],
+    data: [320, 285, 410, 398, 452, 380],
+  },
+  custom: {
+    title: "区间触达趋势",
+    labels: ["区间1", "区间2", "区间3", "区间4", "区间5", "区间6", "区间7"],
+    data: [35, 48, 52, 44, 61, 58, 49],
+  },
+};
+
+/** 触达趋势 - 简易柱状图 */
+const TrendChart = ({
+  colorVar,
+  range,
+}: {
+  colorVar: string;
+  range: StatsTimeRange;
+}) => {
+  const chart = trendDemoByPreset[range.preset];
+  const { title, labels, data } = chart;
   const max = Math.max(...data);
   return (
     <section className="rounded-2xl bg-card p-4 shadow-soft">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <TrendingUp className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">近 7 日触达趋势</h3>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         </div>
         <span className="text-[10px] text-muted-foreground">总计 {data.reduce((a, b) => a + b)}</span>
       </div>
@@ -460,7 +525,7 @@ const TrendChart = ({ colorVar }: { colorVar: string }) => {
                 background: `linear-gradient(180deg, hsl(var(${colorVar})), hsl(var(${colorVar}) / 0.5))`,
               }}
             />
-            <div className="text-[9px] text-muted-foreground">{days[i]}</div>
+            <div className="text-[9px] text-muted-foreground">{labels[i]}</div>
           </div>
         ))}
       </div>
