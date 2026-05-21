@@ -90,7 +90,7 @@ const festivalOptions: FestivalOpt[] = [
   { name: "情人节", date: "2/14", group: "west" },
   { name: "妇女节", date: "3/8", group: "cn" },
   { name: "白色情人节", date: "3/14", group: "west" },
-  { name: "清明节", date: "4/4", group: "cn" },
+  { name: "清明节", date: "约 4/4～4/6", group: "cn" },
   { name: "复活节", date: "4 月", group: "west" },
   { name: "劳动节", date: "5/1", group: "cn" },
   { name: "母亲节", date: "5 月第二个周日", group: "west" },
