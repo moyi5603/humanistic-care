@@ -96,6 +96,7 @@ export const careTypesWithValidDate: CareType[] = [
   "birthday",
   "festival",
   "weather",
+  "workload",
 ];
 
 export const hasValidDateStep = (type: CareType) =>
@@ -243,6 +244,7 @@ export const sampleRules: CareRule[] = [
     points: 30,
     enabled: true,
     reached: 47,
+    validDateRange: { mode: "year" },
   },
 ];
 

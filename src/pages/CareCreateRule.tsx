@@ -584,7 +584,7 @@ const CareCreateRule = () => {
                 }
               />
 
-              {/* STEP 有效日期 (生日/节日关怀) */}
+              {/* STEP 有效日期 */}
               {hasValidDateStep(moduleType) && (
                 <TimelineStep
                   step={moduleType === "festival" ? "05" : "04"}
@@ -622,7 +622,7 @@ const CareCreateRule = () => {
                   step={
                     moduleType === "festival"
                       ? "06"
-                      : moduleType === "birthday"
+                      : hasValidDateStep(moduleType)
                         ? "05"
                         : "04"
                   }

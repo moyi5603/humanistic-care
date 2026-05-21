@@ -74,7 +74,7 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     greeting: "辛苦了,记得照顾自己",
     gradientFrom: "hsl(260 60% 55%)",
     gradientTo: "hsl(220 65% 50%)",
-    ctaPrimary: "🎁 领取加班礼包",
+    ctaPrimary: "🎁 领取辛苦补贴",
     perks: [
       { label: "加班礼包", icon: Gift, color: "--cat-2" },
       { label: "夜宵福利", icon: HandHeart, color: "--cat-7" },
