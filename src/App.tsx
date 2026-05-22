@@ -17,6 +17,7 @@ import CapabilityDetail from "./pages/CapabilityDetail.tsx";
 
 import NotFound from "./pages/NotFound.tsx";
 import WeatherCareContentPrototype from "./pages/prototype/WeatherCareContentPrototype.tsx";
+import WeatherCareContentSheetPrototype from "./pages/prototype/WeatherCareContentSheetPrototype.tsx";
 import WorkloadOvertimeTriggerPrototype from "./pages/prototype/WorkloadOvertimeTriggerPrototype.tsx";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,10 @@ const App = () => (
           <Route
             path="/prototype/weather-care-content"
             element={<WeatherCareContentPrototype />}
+          />
+          <Route
+            path="/prototype/weather-care-content-sheet"
+            element={<WeatherCareContentSheetPrototype />}
           />
           <Route
             path="/prototype/workload-overtime-trigger"

@@ -42,7 +42,7 @@ export const careModules: Record<CareType, CareModule> = {
     colorVar: "--cat-7",
     triggers: ["生日当天 09:00", "生日前 1 天 18:00"],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "蛋糕券 / 电影票 福利商城",
+    consumeHint: "蛋糕商城 / 电影票 福利商城",
   },
   festival: {
     key: "festival",
@@ -53,7 +53,7 @@ export const careModules: Record<CareType, CareModule> = {
     colorVar: "--cat-4",
     triggers: ["春节", "端午节", "中秋节", "国庆节", "元旦", "妇女节", "劳动节"],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "节日礼包 / 节日商城",
+    consumeHint: "悦享商城 / 电影关怀",
   },
   weather: {
     key: "weather",
@@ -80,7 +80,7 @@ export const careModules: Record<CareType, CareModule> = {
       "凌晨 0 点后仍在线",
     ],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "打车券 / 夜宵福利",
+    consumeHint: "去打车 / 点外卖",
   },
 };
 
@@ -91,13 +91,8 @@ export const careModuleList: CareModule[] = [
   careModules.workload,
 ];
 
-/** 支持有效日期步骤的关怀类型 */
-export const careTypesWithValidDate: CareType[] = [
-  "birthday",
-  "festival",
-  "weather",
-  "workload",
-];
+/** 支持有效日期步骤的关怀类型（已全局关闭） */
+export const careTypesWithValidDate: CareType[] = [];
 
 export const hasValidDateStep = (type: CareType) =>
   careTypesWithValidDate.includes(type);
@@ -253,7 +248,6 @@ export const sampleRules: CareRule[] = [
     points: 50,
     enabled: true,
     reached: 312,
-    validDateRange: { mode: "year" },
   },
   {
     id: "r2",
@@ -265,7 +259,6 @@ export const sampleRules: CareRule[] = [
     points: 100,
     enabled: true,
     reached: 1286,
-    validDateRange: { mode: "year" },
   },
   {
     id: "r3",
@@ -277,7 +270,6 @@ export const sampleRules: CareRule[] = [
     points: 0,
     enabled: true,
     reached: 24,
-    validDateRange: { mode: "year" },
     formData: {
       audience: { all: false, deptIds: [], empIds: [], tags: [] },
       weatherTrigger: {
@@ -300,7 +292,6 @@ export const sampleRules: CareRule[] = [
           selected: "🥵 高温来袭!请注意防暑降温,多补水,减少户外暴晒",
         },
       },
-      validDateRange: { mode: "year" },
     },
   },
   {
@@ -313,7 +304,6 @@ export const sampleRules: CareRule[] = [
     points: 30,
     enabled: true,
     reached: 47,
-    validDateRange: { mode: "year" },
   },
 ];
 
@@ -397,7 +387,7 @@ export const workloadTriggerCategories: WorkloadTriggerCategory[] = [
     icon: CalendarCheck2,
     unit: "天",
     inputType: "number",
-    presets: [2, 3, 5, 7],
+    presets: [3, 5, 7],
     defaultValue: 3,
     defaultEnabled: false,
     min: 1,
@@ -410,7 +400,13 @@ export const workloadTriggerCategories: WorkloadTriggerCategory[] = [
 export type WorkloadTriggerState = {
   key: WorkloadTriggerKey;
   value: number | string;
+  /** 按周 / 连班：是否同步通知上级，默认不勾选 */
+  notifySupervisor?: boolean;
 };
+
+export const workloadTriggerSupportsNotifySupervisor = (
+  key: WorkloadTriggerKey,
+) => key === "weeklyHours" || key === "overtimeDays";
 
 const defaultCat =
   workloadTriggerCategories.find((c) => c.defaultEnabled) ??
@@ -428,9 +424,13 @@ export const summarizeWorkload = (
   if (!cat) {
     return { text: "未设置触发条件", sub: "请选择一种触发条件" };
   }
+  const notify =
+    state.notifySupervisor && workloadTriggerSupportsNotifySupervisor(state.key);
   return {
     text: `${cat.name} ${cat.formatValue(state.value)}`,
-    sub: "触发条件 · 满足即触达",
+    sub: notify
+      ? "触发条件 · 满足即触达 · 同步通知上级"
+      : "触发条件 · 满足即触达",
   };
 };
 
@@ -686,7 +686,10 @@ export const getColdWaveMinTemp = (state: WeatherTriggerState) => {
 export const defaultWeatherTrigger: WeatherTriggerState = {
   enabled: weatherTriggerCategories.reduce(
     (acc, c) => {
-      acc[c.key] = true;
+      acc[c.key] =
+        "defaultEnabled" in c
+          ? Boolean((c as { defaultEnabled?: boolean }).defaultEnabled)
+          : true;
       return acc;
     },
     {} as Record<WeatherTriggerKey, boolean>,
@@ -928,6 +931,13 @@ export const pickFreshAiBatch = (
 
 export type WeatherContentRowStatus = "disabled" | "pending" | "ready";
 
+/** 列表摘要：截断过长关怀文案 */
+export const truncateCarePreviewText = (text: string, max = 26) => {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+};
+
 export const getWeatherContentRowStatus = (
   key: WeatherTriggerKey,
   trigger: WeatherTriggerState,
@@ -1000,4 +1010,128 @@ export const firstWeatherPreviewContent = (
     (c) => trigger.enabled[c.key] && contents[c.key],
   );
   return cat ? resolveWeatherContent(contents[cat.key]) : "";
+};
+
+/** 模拟查收用：取第一条已启用的天气场景 */
+export const firstEnabledWeatherKey = (
+  trigger: WeatherTriggerState,
+): WeatherTriggerKey =>
+  weatherTriggerCategories.find((c) => trigger.enabled[c.key])?.key ??
+  "extremeHeat";
+
+/** 与模拟查收主文案一致：优先取已启用且已配置文案的场景 */
+export const firstWeatherPreviewScenario = (
+  trigger: WeatherTriggerState,
+  contents: WeatherContentMap,
+): WeatherTriggerKey => {
+  const cat = weatherTriggerCategories.find(
+    (c) => trigger.enabled[c.key] && contents[c.key],
+  );
+  return cat?.key ?? firstEnabledWeatherKey(trigger);
+};
+
+/** 天气关怀 · 场景贴士（按钮文案 + 点击后全文） */
+export const weatherScenarioTips: Record<
+  WeatherTriggerKey,
+  { label: string; body: string }
+> = {
+  extremeHeat: {
+    label: "防暑贴士",
+    body: "防暑贴士：炎炎夏日，记得多喝水、适当休息，外出时注意防晒避暑，照顾好自己。",
+  },
+  extremeCold: {
+    label: "保暖贴士",
+    body: "保暖贴士：天冷了，记得添衣保暖，尤其是头和手脚，愿温暖伴你每一天。",
+  },
+  coldWave: {
+    label: "防寒贴士",
+    body: "防寒贴士：气温骤降，注意防寒保暖，减少外出，照顾好自己和家人。",
+  },
+  rainstorm: {
+    label: "防雨贴士",
+    body: "防雨贴士：雨天路滑，出行记得带伞，驾车请慢行，注意安全。",
+  },
+  snowstorm: {
+    label: "防雪贴士",
+    body: "防雪贴士：雪天路难行，减少不必要的外出，驾车务必注意防滑，平安第一。",
+  },
+  typhoon: {
+    label: "防风贴士",
+    body: "防风贴士：台风来临时，请关好门窗、收好阳台物品，减少外出，确保安全。",
+  },
+  sandstorm: {
+    label: "防沙贴士",
+    body: "防沙贴士：沙尘天气，外出请戴好口罩，回家后及时清洁，保持好心情。",
+  },
+  haze: {
+    label: "防霾贴士",
+    body: "防霾贴士：雾霾天气，请减少户外活动，外出佩戴口罩，保护好呼吸系统。",
+  },
+};
+
+/** 天气关怀 · 通勤指南（按钮文案固定，全文随场景变化） */
+export const weatherCommuteGuides: Record<
+  WeatherTriggerKey,
+  { label: string; body: string }
+> = {
+  extremeHeat: {
+    label: "通勤指南",
+    body: "通勤指南：避开中午烈日时段，公交地铁注意防潮降温，自驾提前检查空调，外出带杯水及时补水。",
+  },
+  extremeCold: {
+    label: "通勤指南",
+    body: "通勤指南：做好头部保暖，步行防摔倒，骑行戴手套，驾车提前热车，公共交通较稳妥。",
+  },
+  coldWave: {
+    label: "通勤指南",
+    body: "通勤指南：比平时提早出门，路面可能结冰，步行防滑倒，建议公共交通更安全。",
+  },
+  rainstorm: {
+    label: "通勤指南",
+    body: "通勤指南：带好雨伞，提前出门避高峰，避开积水路段，驾车开雾灯减速行，深水绕行。",
+  },
+  snowstorm: {
+    label: "通勤指南",
+    body: "通勤指南：尽量减少出行，建议公共交通，必须驾车装防滑链，步行防摔伤。",
+  },
+  typhoon: {
+    label: "通勤指南",
+    body: "通勤指南：避免骑单车，避开广告牌下行走，公共交通更安全，非必要不出门。",
+  },
+  sandstorm: {
+    label: "通勤指南",
+    body: "通勤指南：戴好口罩帽子，到单位及时洗脸漱口，驾车关闭车窗使用内循环。",
+  },
+  haze: {
+    label: "通勤指南",
+    body: "通勤指南：戴好口罩，公共交通更佳，驾车关闭车窗，早练改为室内，敏感人群减少外出。",
+  },
+};
+
+export type WeatherPreviewPerk = {
+  label: string;
+  body: string;
+  icon: LucideIcon;
+  colorVar: string;
+};
+
+export const getWeatherPreviewPerks = (
+  key: WeatherTriggerKey,
+): WeatherPreviewPerk[] => {
+  const cat = weatherTriggerCategories.find((c) => c.key === key)!;
+  const tip = weatherScenarioTips[key];
+  return [
+    {
+      label: tip.label,
+      body: tip.body,
+      icon: cat.icon,
+      colorVar: cat.colorVar,
+    },
+    {
+      label: weatherCommuteGuides[key].label,
+      body: weatherCommuteGuides[key].body,
+      icon: Wind,
+      colorVar: "--cat-3",
+    },
+  ];
 };

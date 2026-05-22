@@ -9,6 +9,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Info } from "lucide-react";
 import {
+  WeatherScenarioTabGrid,
+  type WeatherTabStatus,
+} from "@/components/care/WeatherScenarioTabGrid";
+import {
   weatherTriggerCategories,
   warningLevelMeta,
   allWarningLevels,
@@ -68,6 +72,23 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
     (c) => draft.enabled[c.key],
   ).length;
 
+  const tabTriggerStatus = (key: WeatherTriggerKey): WeatherTabStatus => {
+    if (!draft.enabled[key]) return "disabled";
+    const cat = weatherTriggerCategories.find((c) => c.key === key)!;
+    if (cat.kind === "warning") {
+      const levels = draft.levels[key] ?? [...cat.defaultLevels];
+      if (levels.length === 0) return "pending";
+    }
+    return "ready";
+  };
+
+  const readyCount = weatherTriggerCategories.filter(
+    (c) => tabTriggerStatus(c.key) === "ready",
+  ).length;
+  const pendingCount = weatherTriggerCategories.filter(
+    (c) => tabTriggerStatus(c.key) === "pending",
+  ).length;
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
@@ -76,37 +97,31 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
           <SheetHeader className="px-4 pt-4">
             <SheetTitle className="text-left text-base">天气触发条件</SheetTitle>
             <p className="text-left text-[11px] text-muted-foreground">
-              共 {weatherTriggerCategories.length} 类,已启用 {enabledCount} 项 · 满足任一条件即触达
+              共 {weatherTriggerCategories.length} 类 · 已启用 {enabledCount} 项
+              {enabledCount > 0 && (
+                <span className="text-foreground/80">
+                  {" "}
+                  · 已完善 {readyCount}
+                  {pendingCount > 0 ? ` / 待完善 ${pendingCount}` : ""}
+                </span>
+              )}
+              {" "}
+              · 满足任一条件即触达
             </p>
           </SheetHeader>
 
-          {/* Tabs - 4 cols x 2 rows so all 8 visible */}
           <div className="mt-3 px-4">
-            <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1">
-              {weatherTriggerCategories.map((cat) => {
-                const Icon = cat.icon;
-                const active = cat.key === activeKey;
-                const on = draft.enabled[cat.key];
-                return (
-                  <button
-                    key={cat.key}
-                    type="button"
-                    onClick={() => setActiveKey(cat.key)}
-                    className={`relative flex flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-[11px] font-medium transition-base ${
-                      active
-                        ? "bg-card text-primary shadow-soft"
-                        : "text-muted-foreground active:scale-95"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" strokeWidth={2.4} />
-                    <span className="truncate">{cat.short}</span>
-                    {!on && (
-                      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <WeatherScenarioTabGrid
+              activeKey={activeKey}
+              onSelect={setActiveKey}
+              getStatus={tabTriggerStatus}
+              pendingBadge="待完善"
+              legend={{
+                ready: "已启用",
+                pending: "待完善条件",
+                disabled: "未启用",
+              }}
+            />
           </div>
 
           {/* Active panel */}

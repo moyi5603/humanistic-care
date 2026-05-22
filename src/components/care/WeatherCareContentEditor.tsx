@@ -14,6 +14,7 @@ import {
   aiWeatherContentVariants,
   getWeatherContentRowStatus,
   getWeatherThresholdLabel,
+  truncateCarePreviewText,
   type WeatherContentMap,
   type WeatherContentRowStatus,
   type WeatherTriggerKey,
@@ -37,8 +38,10 @@ export const WeatherCareContentEditor = ({
   const [aiDraft, setAiDraft] = useState("");
   const [contentDraft, setContentDraft] = useState("");
 
-  const enabledCount = weatherTriggerCategories.filter((c) => trigger.enabled[c.key])
-    .length;
+  const enabledCats = weatherTriggerCategories.filter(
+    (c) => trigger.enabled[c.key],
+  );
+  const disabledCount = weatherTriggerCategories.length - enabledCats.length;
 
   const openEdit = (key: WeatherTriggerKey) => {
     if (!trigger.enabled[key]) return;
@@ -73,7 +76,7 @@ export const WeatherCareContentEditor = ({
     ? weatherTriggerCategories.find((c) => c.key === editKey)
     : null;
 
-  if (enabledCount === 0) {
+  if (enabledCats.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-amber-300/60 bg-amber-50/40 px-3 py-6 text-center">
         <AlertCircle className="mx-auto mb-2 h-8 w-8 text-amber-600/70" />
@@ -90,8 +93,8 @@ export const WeatherCareContentEditor = ({
 
   return (
     <>
-      <ul className="space-y-1.5">
-        {weatherTriggerCategories.map((cat) => {
+      <ul className="space-y-1">
+        {enabledCats.map((cat) => {
           const status = getWeatherContentRowStatus(cat.key, trigger, contents);
           const Icon = cat.icon;
           const threshold = getWeatherThresholdLabel(cat.key, trigger);
@@ -101,55 +104,55 @@ export const WeatherCareContentEditor = ({
             <li key={cat.key}>
               <button
                 type="button"
-                disabled={status === "disabled"}
                 onClick={() => openEdit(cat.key)}
                 className={cn(
-                  "flex w-full items-start gap-2 rounded-xl border px-2.5 py-2.5 text-left transition-base",
-                  status === "disabled" &&
-                    "cursor-not-allowed border-transparent bg-muted/40 opacity-60",
-                  status === "pending" &&
-                    "border-amber-200/80 bg-amber-50/50 active:scale-[0.99]",
-                  status === "ready" &&
-                    "border-border bg-card active:scale-[0.99] hover:bg-secondary/30",
+                  "flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-base active:scale-[0.99]",
+                  status === "pending"
+                    ? "border-amber-200/80 bg-amber-50/50"
+                    : "border-border bg-card hover:bg-secondary/30",
                 )}
               >
                 <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
                   style={{
                     background: `hsl(var(${cat.colorVar}) / 0.15)`,
                     color: `hsl(var(${cat.colorVar}))`,
                   }}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-semibold text-foreground">{cat.name}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-xs font-semibold text-foreground">
+                      {cat.short}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {threshold}
+                    </span>
                     <WeatherContentStatusBadge status={status} />
                   </div>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{threshold}</p>
-                  {status === "disabled" ? (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      未启用 · 该场景不会触达
-                    </p>
-                  ) : status === "pending" ? (
-                    <p className="mt-1 text-[11px] font-medium text-amber-800">
-                      已启用，请选择 AI 生成文案
+                  {status === "pending" ? (
+                    <p className="mt-0.5 text-[10px] font-medium text-amber-800">
+                      点击选择 AI 文案
                     </p>
                   ) : (
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-foreground/90">
-                      {preview}
+                    <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                      {truncateCarePreviewText(preview)}
                     </p>
                   )}
                 </div>
-                {status !== "disabled" && (
-                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
-                )}
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
             </li>
           );
         })}
       </ul>
+
+      {disabledCount > 0 && (
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+          另有 {disabledCount} 类未启用 · 在「触发条件」中开启后可配置
+        </p>
+      )}
 
       <Sheet open={!!editKey} onOpenChange={(o) => !o && setEditKey(null)}>
         <SheetContent side="bottom" className="rounded-t-3xl">
@@ -197,22 +200,15 @@ export const WeatherCareContentEditor = ({
 };
 
 function WeatherContentStatusBadge({ status }: { status: WeatherContentRowStatus }) {
-  if (status === "disabled") {
-    return (
-      <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-        未启用
-      </span>
-    );
-  }
   if (status === "pending") {
     return (
-      <span className="shrink-0 rounded-md bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-medium text-amber-900">
+      <span className="ml-auto shrink-0 rounded-md bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-medium text-amber-900">
         待选择
       </span>
     );
   }
   return (
-    <span className="flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-medium text-emerald-800">
+    <span className="ml-auto flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-medium text-emerald-800">
       <CheckCircle2 className="h-2.5 w-2.5" />
       已配置
     </span>

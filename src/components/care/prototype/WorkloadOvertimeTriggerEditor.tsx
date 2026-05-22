@@ -25,7 +25,7 @@ export type WorkloadTriggerPrototypeValue =
   | { kind: "standard"; state: WorkloadTriggerState }
   | { kind: "overtimeDays"; config: OvertimeDaysTriggerConfig };
 
-const DAY_PRESETS = [2, 3, 5, 7] as const;
+const DAY_PRESETS = [3, 5, 7] as const;
 const HOUR_PRESETS = [8, 10, 12, 14] as const;
 
 export const defaultOvertimeDaysConfig: OvertimeDaysTriggerConfig = {

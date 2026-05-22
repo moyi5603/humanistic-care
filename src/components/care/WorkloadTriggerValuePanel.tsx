@@ -1,18 +1,48 @@
 import type { WorkloadTriggerCategory } from "@/data/humanityCare";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Props = {
   cat: WorkloadTriggerCategory;
   value: number | string;
   onChange: (v: number | string) => void;
+  /** 按周 / 连班：右上角「发送给上级」 */
+  notifySupervisor?: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+  };
 };
 
-/** 工作强度触发 · 单日 / 下班 / 周 / 连班(旧版) 数值面板 */
-export const WorkloadTriggerValuePanel = ({ cat, value, onChange }: Props) => {
+/** 工作强度触发 · 单日 / 下班 / 周 / 连班 数值面板 */
+export const WorkloadTriggerValuePanel = ({
+  cat,
+  value,
+  onChange,
+  notifySupervisor,
+}: Props) => {
   const isPreset = cat.presets.includes(value);
 
   return (
-    <div className="rounded-2xl border border-primary/40 bg-card p-4 shadow-soft">
-      <div className="text-center text-[11px] text-muted-foreground">{cat.desc}</div>
+    <div className="relative rounded-2xl border border-primary/40 bg-card p-4 shadow-soft">
+      {notifySupervisor && (
+        <label className="absolute right-3 top-3 z-10 flex cursor-pointer items-center gap-1.5">
+          <Checkbox
+            checked={notifySupervisor.checked}
+            onCheckedChange={(checked) =>
+              notifySupervisor.onChange(checked === true)
+            }
+          />
+          <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
+            发送给上级
+          </span>
+        </label>
+      )}
+      <div
+        className={`text-center text-[11px] text-muted-foreground ${
+          notifySupervisor ? "pr-20" : ""
+        }`}
+      >
+        {cat.desc}
+      </div>
       <div className="mt-2 text-center text-2xl font-bold text-foreground">
         {cat.formatValue(value)}
       </div>

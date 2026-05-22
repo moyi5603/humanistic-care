@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/sheet";
 import {
   workloadTriggerCategories,
+  workloadTriggerSupportsNotifySupervisor,
   type WorkloadTriggerState,
   type WorkloadTriggerKey,
 } from "@/data/humanityCare";
@@ -35,11 +36,25 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
       return init;
     },
   );
+  const [notifyByKey, setNotifyByKey] = useState<
+    Partial<Record<WorkloadTriggerKey, boolean>>
+  >(() => {
+    if (workloadTriggerSupportsNotifySupervisor(value.key)) {
+      return { [value.key]: value.notifySupervisor ?? false };
+    }
+    return {};
+  });
 
   useEffect(() => {
     if (open) {
       setActiveKey(value.key);
       setValueMap((m) => ({ ...m, [value.key]: value.value }));
+      if (workloadTriggerSupportsNotifySupervisor(value.key)) {
+        setNotifyByKey((m) => ({
+          ...m,
+          [value.key]: value.notifySupervisor ?? false,
+        }));
+      }
     }
   }, [open, value]);
 
@@ -50,8 +65,19 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
     setValueMap((m) => ({ ...m, [activeKey]: v }));
   };
 
+  const showNotifySupervisor =
+    workloadTriggerSupportsNotifySupervisor(activeKey);
+  const notifySupervisor = notifyByKey[activeKey] ?? false;
+
   const confirm = () => {
-    onChange({ key: activeKey, value: valueMap[activeKey] });
+    const next: WorkloadTriggerState = {
+      key: activeKey,
+      value: valueMap[activeKey],
+    };
+    if (workloadTriggerSupportsNotifySupervisor(activeKey)) {
+      next.notifySupervisor = notifyByKey[activeKey] ?? false;
+    }
+    onChange(next);
     setOpen(false);
   };
 
@@ -98,6 +124,18 @@ export const WorkloadTriggerEditor = ({ value, onChange, trigger }: Props) => {
               cat={activeCat}
               value={activeValue}
               onChange={setActiveValue}
+              notifySupervisor={
+                showNotifySupervisor
+                  ? {
+                      checked: notifySupervisor,
+                      onChange: (checked) =>
+                        setNotifyByKey((m) => ({
+                          ...m,
+                          [activeKey]: checked,
+                        })),
+                    }
+                  : undefined
+              }
             />
           </div>
 

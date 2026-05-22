@@ -12,7 +12,6 @@ import {
   Heart,
   Coins,
   CalendarDays,
-  CalendarRange,
   Eye,
   X,
 } from "lucide-react";
@@ -27,17 +26,15 @@ import {
   type CareType,
   type CareRule,
   type CareRuleFormData,
-  defaultValidDateRange,
-  hasValidDateStep,
   defaultWorkloadTrigger,
-  summarizeValidDate,
   summarizeWorkload,
-  type ValidDateRange,
   type WorkloadTriggerState,
   defaultWeatherTrigger,
   summarizeWeather,
   summarizeWeatherContent,
+  truncateCarePreviewText,
   countWeatherContentReady,
+  firstWeatherPreviewScenario,
   firstWeatherPreviewContent,
   weatherTriggerCategories,
   type WeatherContentMap,
@@ -52,7 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getCareRule, upsertCareRule } from "@/data/careRulesStore";
 import { WorkloadTriggerEditor } from "@/components/care/WorkloadTriggerEditor";
 import { WeatherTriggerEditor } from "@/components/care/WeatherTriggerEditor";
-import { WeatherCareContentEditor } from "@/components/care/WeatherCareContentEditor";
+import { WeatherCareContentSheetEditor } from "@/components/care/WeatherCareContentSheetEditor";
 import { CareContentAiPanel } from "@/components/care/CareContentAiPanel";
 import {
   Sheet,
@@ -64,7 +61,6 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CareReceiveSimulator } from "@/components/care/CareReceiveSimulator";
-import { MobileDateField } from "@/components/ui/mobile-date-field";
 
 // 不同关怀类型的积分名称(慰问 vs 奖励)
 const pointLabels: Record<CareType, { name: string; hint: string }> = {
@@ -217,12 +213,6 @@ const CareCreateRule = () => {
   const weatherSummary = summarizeWeather(weatherTrigger);
   const weatherContentSummary = summarizeWeatherContent(weatherTrigger, weatherContents);
   const weatherContentReadyCount = countWeatherContentReady(weatherTrigger, weatherContents);
-  const [validDateRange, setValidDateRange] = useState<ValidDateRange>(
-    () =>
-      existingRule?.formData?.validDateRange ?? defaultValidDateRange(),
-  );
-  const validDateSummary = summarizeValidDate(validDateRange);
-
   const audienceSummary = summarizeAudience(audience);
   const audienceRuleSummary = audience.tags.length
     ? audience.tags.join(" · ")
@@ -321,7 +311,6 @@ const CareCreateRule = () => {
         moduleType === "workload" ? workloadTrigger : undefined,
       weatherTrigger: moduleType === "weather" ? weatherTrigger : undefined,
       weatherContents: moduleType === "weather" ? weatherContents : undefined,
-      validDateRange: hasValidDateStep(moduleType) ? validDateRange : undefined,
     };
 
     const rule: CareRule = {
@@ -335,7 +324,6 @@ const CareCreateRule = () => {
       enabled: existingRule?.enabled ?? true,
       reached: existingRule?.reached ?? 0,
       formData,
-      ...(hasValidDateStep(moduleType) ? { validDateRange } : {}),
     };
 
     upsertCareRule(rule);
@@ -550,10 +538,21 @@ const CareCreateRule = () => {
                 }
                 summary={
                   moduleType === "weather" ? (
-                    <WeatherCareContentEditor
+                    <WeatherCareContentSheetEditor
                       trigger={weatherTrigger}
                       contents={weatherContents}
                       onChange={setWeatherContents}
+                      triggerNode={
+                        <SummaryRow
+                          icon={<Heart className="h-3.5 w-3.5 text-muted-foreground" />}
+                          text={
+                            weatherContentSummary.text === "未配置触达文案"
+                              ? "请点击配置各场景触达文案"
+                              : truncateCarePreviewText(weatherContentSummary.text, 36)
+                          }
+                          sub={weatherContentSummary.sub}
+                        />
+                      }
                     />
                   ) : (
                     <SummaryRow
@@ -584,48 +583,10 @@ const CareCreateRule = () => {
                 }
               />
 
-              {/* STEP 有效日期 */}
-              {hasValidDateStep(moduleType) && (
-                <TimelineStep
-                  step={moduleType === "festival" ? "05" : "04"}
-                  title="有效日期"
-                  icon={CalendarRange}
-                  colorVar="--cat-5"
-                  editTrigger={
-                    <ValidDatePicker
-                      value={validDateRange}
-                      onChange={setValidDateRange}
-                      trigger={<EditPencil />}
-                    />
-                  }
-                  summary={
-                    <ValidDatePicker
-                      value={validDateRange}
-                      onChange={setValidDateRange}
-                      trigger={
-                        <SummaryRow
-                          icon={
-                            <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
-                          }
-                          text={validDateSummary.text}
-                          sub={validDateSummary.sub}
-                        />
-                      }
-                    />
-                  }
-                />
-              )}
-
               {/* STEP 积分(慰问/奖励) */}
               {hasPoints && (
                 <TimelineStep
-                  step={
-                    moduleType === "festival"
-                      ? "06"
-                      : hasValidDateStep(moduleType)
-                        ? "05"
-                        : "04"
-                  }
+                  step={moduleType === "festival" ? "05" : "04"}
                   title={pointInfo.name}
                   icon={Coins}
                   colorVar="--cat-1"
@@ -842,6 +803,11 @@ const CareCreateRule = () => {
                 points={points}
                 pointName={pointInfo.name}
                 hasPoints={hasPoints}
+                weatherScenario={
+                  moduleType === "weather"
+                    ? firstWeatherPreviewScenario(weatherTrigger, weatherContents)
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -1000,149 +966,6 @@ const SelectLike = ({
     </SheetContent>
   </Sheet>
 );
-
-const validDatePresets: {
-  mode: ValidDateRange["mode"];
-  label: string;
-  desc: string;
-}[] = [
-  { mode: "year", label: "本年度", desc: "当年 1/1 — 12/31 生效" },
-  { mode: "permanent", label: "长期有效", desc: "无截止日期, 持续生效" },
-  { mode: "custom", label: "自定义", desc: "指定起止日期" },
-];
-
-const formatLocalIsoDate = (d = new Date()) => {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-const ValidDatePicker = ({
-  value,
-  onChange,
-  trigger,
-}: {
-  value: ValidDateRange;
-  onChange: (v: ValidDateRange) => void;
-  trigger: React.ReactNode;
-}) => {
-  const year = new Date().getFullYear();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  const pickPreset = (mode: ValidDateRange["mode"]) => {
-    if (mode === "custom") {
-      const today = formatLocalIsoDate();
-      setDraft({ mode: "custom", start: today, end: `${year}-12-31` });
-    } else {
-      onChange({ mode });
-      setOpen(false);
-    }
-  };
-
-  const confirmCustom = () => {
-    if (!draft.start || !draft.end) return;
-    if (draft.start > draft.end) return;
-    onChange({ mode: "custom", start: draft.start, end: draft.end });
-    setOpen(false);
-  };
-
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (o) setDraft(value);
-      }}
-    >
-      <SheetTrigger asChild>{trigger}</SheetTrigger>
-      <SheetContent side="bottom" className="rounded-t-3xl">
-        <SheetHeader>
-          <SheetTitle className="text-left text-base">设置有效日期</SheetTitle>
-        </SheetHeader>
-        <ul className="mt-3 space-y-1">
-          {validDatePresets.map((opt) => (
-            <li key={opt.mode}>
-              {opt.mode === "custom" ? (
-                <button
-                  type="button"
-                  onClick={() => pickPreset("custom")}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-base ${
-                    draft.mode === "custom"
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground active:bg-secondary"
-                  }`}
-                >
-                  <span className="flex min-w-0 flex-col">
-                    <span>{opt.label}</span>
-                    <span className="text-[11px] opacity-80">{opt.desc}</span>
-                  </span>
-                  {draft.mode === "custom" && (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                  )}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => pickPreset(opt.mode)}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-base ${
-                    draft.mode === opt.mode
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground active:bg-secondary"
-                  }`}
-                >
-                  <span className="flex min-w-0 flex-col">
-                    <span>{opt.label}</span>
-                    <span className="text-[11px] opacity-80">{opt.desc}</span>
-                  </span>
-                  {draft.mode === opt.mode && (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                  )}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-        {draft.mode === "custom" && (
-          <div className="mt-4 space-y-3 rounded-xl border border-border bg-secondary/40 p-3">
-            <div className="space-y-2">
-              <MobileDateField
-                label="开始日期"
-                value={draft.start ?? ""}
-                max={draft.end}
-                onChange={(start) =>
-                  setDraft((d) => ({ ...d, mode: "custom", start }))
-                }
-              />
-              <MobileDateField
-                label="结束日期"
-                value={draft.end ?? ""}
-                min={draft.start}
-                onChange={(end) =>
-                  setDraft((d) => ({ ...d, mode: "custom", end }))
-                }
-              />
-            </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                confirmCustom();
-              }}
-              disabled={
-                !draft.start ||
-                !draft.end ||
-                draft.start > draft.end
-              }
-              className="relative z-10 w-full rounded-full gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-base active:scale-95 disabled:opacity-40"
-            >
-              确定
-            </button>
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-};
 
 const FestivalPicker = ({
   value,

@@ -2,10 +2,7 @@ import {
   Cake,
   Film,
   Gift,
-  Sparkles,
   Umbrella,
-  Sun,
-  Snowflake,
   Wind,
   Moon,
   HandHeart,
@@ -13,7 +10,12 @@ import {
   Coins,
   type LucideIcon,
 } from "lucide-react";
-import type { CareType } from "@/data/humanityCare";
+import {
+  getWeatherPreviewPerks,
+  type CareType,
+  type WeatherTriggerKey,
+} from "@/data/humanityCare";
+import { cn } from "@/lib/utils";
 
 export type PreviewConfig = {
   icon: LucideIcon;
@@ -36,7 +38,7 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientTo: "hsl(20 90% 60%)",
     ctaPrimary: "🎁 查收生日礼包",
     perks: [
-      { label: "蛋糕券", icon: Cake, color: "--cat-7" },
+      { label: "蛋糕商城", icon: Cake, color: "--cat-7" },
       { label: "电影票", icon: Film, color: "--cat-4" },
     ],
   },
@@ -49,8 +51,8 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientTo: "hsl(35 90% 58%)",
     ctaPrimary: "🎁 领取节日礼包",
     perks: [
-      { label: "节日礼包", icon: Gift, color: "--cat-4" },
-      { label: "节日商城", icon: Sparkles, color: "--cat-1" },
+      { label: "悦享商城", icon: Gift, color: "--cat-4" },
+      { label: "电影关怀", icon: Film, color: "--cat-1" },
     ],
   },
   weather: {
@@ -61,11 +63,7 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientFrom: "hsl(210 75% 55%)",
     gradientTo: "hsl(190 70% 55%)",
     ctaPrimary: "通知已收到",
-    perks: [
-      { label: "防晒贴士", icon: Sun, color: "--cat-1" },
-      { label: "保暖建议", icon: Snowflake, color: "--cat-9" },
-      { label: "通勤指南", icon: Wind, color: "--cat-3" },
-    ],
+    perks: [],
   },
   workload: {
     icon: Moon,
@@ -76,8 +74,8 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientTo: "hsl(220 65% 50%)",
     ctaPrimary: "🎁 领取辛苦补贴",
     perks: [
-      { label: "加班礼包", icon: Gift, color: "--cat-2" },
-      { label: "夜宵福利", icon: HandHeart, color: "--cat-7" },
+      { label: "去打车", icon: Gift, color: "--cat-2" },
+      { label: "点外卖", icon: HandHeart, color: "--cat-7" },
     ],
   },
 };
@@ -91,8 +89,16 @@ type Props = {
   /** compact = 用于列表的紧凑展示(隐藏底部 CTA & 福利栏) */
   compact?: boolean;
   timeLabel?: string;
-  /** 是否显示底部「稍后」按钮 */
-  showLaterButton?: boolean;
+  /** 天气关怀：当前模拟的场景，决定贴士按钮文案与详情 */
+  weatherScenario?: WeatherTriggerKey;
+  /** 点击福利按钮（由 IM 会话承接详情文案） */
+  onPerkClick?: (label: string, body: string) => void;
+  /** 点击主按钮查收 */
+  onReceiveClick?: () => void;
+  /** 仅禁用主查收按钮（查收后仍可点福利贴士） */
+  receiveDisabled?: boolean;
+  /** 查收动画播放中禁用福利按钮 */
+  perkDisabled?: boolean;
 };
 
 export const CarePreviewCard = ({
@@ -103,11 +109,23 @@ export const CarePreviewCard = ({
   hasPoints,
   compact = false,
   timeLabel = "刚刚",
-  showLaterButton = true,
+  weatherScenario = "extremeHeat",
+  onPerkClick,
+  onReceiveClick,
+  receiveDisabled = false,
+  perkDisabled = false,
 }: Props) => {
   const cfg = previewConfig[moduleType];
   const Icon = cfg.icon;
-  const showLater = showLaterButton && moduleType !== "birthday";
+  const displayPerks =
+    moduleType === "weather"
+      ? getWeatherPreviewPerks(weatherScenario)
+      : cfg.perks.map((p) => ({
+          label: p.label,
+          body: "",
+          icon: p.icon,
+          colorVar: p.color,
+        }));
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft">
@@ -174,7 +192,7 @@ export const CarePreviewCard = ({
                 {pointName}
               </div>
               <div className="text-[9px] text-muted-foreground">
-                点击查收即可入账
+                点击下方按钮查收即可入账
               </div>
             </div>
           </div>
@@ -184,24 +202,32 @@ export const CarePreviewCard = ({
         </div>
       )}
 
-      {!compact && cfg.perks.length > 0 && (
+      {!compact && displayPerks.length > 0 && (
         <div className="px-3 py-2.5">
           <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
             为你准备的福利
           </div>
           <div className="flex gap-1.5">
-            {cfg.perks.map((p) => {
+            {displayPerks.map((p) => {
               const PI = p.icon;
               return (
-                <div
+                <button
                   key={p.label}
-                  className="flex flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 py-1.5"
+                  type="button"
+                  disabled={perkDisabled || !p.body}
+                  onClick={() => p.body && onPerkClick?.(p.label, p.body)}
+                  className={cn(
+                    "flex flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 py-1.5 text-left transition-base active:scale-[0.98]",
+                    p.body
+                      ? "hover:bg-secondary/50"
+                      : "cursor-default opacity-60",
+                  )}
                 >
                   <div
                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                     style={{
-                      background: `hsl(var(${p.color}) / 0.15)`,
-                      color: `hsl(var(${p.color}))`,
+                      background: `hsl(var(${p.colorVar}) / 0.15)`,
+                      color: `hsl(var(${p.colorVar}))`,
                     }}
                   >
                     <PI className="h-3 w-3" />
@@ -209,7 +235,7 @@ export const CarePreviewCard = ({
                   <span className="truncate text-[10px] font-medium text-foreground">
                     {p.label}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -217,26 +243,18 @@ export const CarePreviewCard = ({
       )}
 
       {!compact && (
-        <div
-          className={`flex items-center border-t border-border/50 px-3 py-2 ${
-            showLater ? "gap-2" : ""
-          }`}
-        >
+        <div className="border-t border-border/50 px-3 py-2">
           <button
-            className={`rounded-full py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm ${
-              showLater ? "flex-1" : "w-full"
-            }`}
+            type="button"
+            disabled={receiveDisabled}
+            onClick={() => onReceiveClick?.()}
+            className="w-full rounded-full py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm transition-base active:scale-[0.98] disabled:opacity-50"
             style={{
               background: `linear-gradient(135deg, ${cfg.gradientFrom}, ${cfg.gradientTo})`,
             }}
           >
             {cfg.ctaPrimary}
           </button>
-          {showLater && (
-            <button className="rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-              稍后
-            </button>
-          )}
         </div>
       )}
     </div>

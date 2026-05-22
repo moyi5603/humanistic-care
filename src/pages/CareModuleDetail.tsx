@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   ShoppingBag,
   TrendingUp,
-  CalendarRange,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -31,8 +30,6 @@ import { toast } from "sonner";
 import {
   careModules,
   defaultStatsTimeRange,
-  formatValidDateForList,
-  hasValidDateStep,
   statsTimeRangeScale,
   summarizeStatsTimeRange,
   type CareType,
@@ -306,17 +303,6 @@ const RuleCard = ({
             <span className="truncate max-w-[55%]">{rule.audience}</span>
             <span className="shrink-0">· {rule.triggerTime}</span>
           </p>
-          {hasValidDateStep(moduleType) && (
-            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-              <CalendarRange className="h-3 w-3 shrink-0 opacity-70" />
-              <span className="truncate">
-                有效日期 ·{" "}
-                {formatValidDateForList(
-                  rule.validDateRange ?? rule.formData?.validDateRange,
-                )}
-              </span>
-            </p>
-          )}
         </div>
       </div>
 
