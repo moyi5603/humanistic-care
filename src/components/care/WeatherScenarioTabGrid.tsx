@@ -19,6 +19,8 @@ type Props = {
   getStatus: (key: WeatherTriggerKey) => WeatherTabStatus;
   pendingBadge?: string;
   legend?: LegendLabels;
+  /** 是否展示「待完善/待配」角标与图例，触发条件弹层关闭 */
+  showPending?: boolean;
 };
 
 const defaultLegend: LegendLabels = {
@@ -33,6 +35,7 @@ export const WeatherScenarioTabGrid = ({
   getStatus,
   pendingBadge = "待配",
   legend = defaultLegend,
+  showPending = true,
 }: Props) => {
   return (
     <div>
@@ -72,7 +75,7 @@ export const WeatherScenarioTabGrid = ({
                   <Check className="h-2.5 w-2.5" strokeWidth={3} />
                 </span>
               )}
-              {status === "pending" && (
+              {showPending && status === "pending" && (
                 <span className="absolute -right-0.5 -top-0.5 rounded-full bg-amber-500 px-1 py-px text-[8px] font-bold leading-none text-white shadow-sm">
                   {pendingBadge}
                 </span>
@@ -88,12 +91,14 @@ export const WeatherScenarioTabGrid = ({
           </span>
           {legend.ready}
         </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="rounded-full bg-amber-500 px-1 text-[8px] font-bold text-white">
-            {pendingBadge}
+        {showPending && (
+          <span className="inline-flex items-center gap-1">
+            <span className="rounded-full bg-amber-500 px-1 text-[8px] font-bold text-white">
+              {pendingBadge}
+            </span>
+            {legend.pending}
           </span>
-          {legend.pending}
-        </span>
+        )}
         <span className="inline-flex items-center gap-1 opacity-50">
           <span className="h-3.5 w-3.5 rounded border border-transparent" />
           {legend.disabled}

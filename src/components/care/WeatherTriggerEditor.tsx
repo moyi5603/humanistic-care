@@ -72,22 +72,8 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
     (c) => draft.enabled[c.key],
   ).length;
 
-  const tabTriggerStatus = (key: WeatherTriggerKey): WeatherTabStatus => {
-    if (!draft.enabled[key]) return "disabled";
-    const cat = weatherTriggerCategories.find((c) => c.key === key)!;
-    if (cat.kind === "warning") {
-      const levels = draft.levels[key] ?? [...cat.defaultLevels];
-      if (levels.length === 0) return "pending";
-    }
-    return "ready";
-  };
-
-  const readyCount = weatherTriggerCategories.filter(
-    (c) => tabTriggerStatus(c.key) === "ready",
-  ).length;
-  const pendingCount = weatherTriggerCategories.filter(
-    (c) => tabTriggerStatus(c.key) === "pending",
-  ).length;
+  const tabTriggerStatus = (key: WeatherTriggerKey): WeatherTabStatus =>
+    draft.enabled[key] ? "ready" : "disabled";
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -97,16 +83,8 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
           <SheetHeader className="px-4 pt-4">
             <SheetTitle className="text-left text-base">天气触发条件</SheetTitle>
             <p className="text-left text-[11px] text-muted-foreground">
-              共 {weatherTriggerCategories.length} 类 · 已启用 {enabledCount} 项
-              {enabledCount > 0 && (
-                <span className="text-foreground/80">
-                  {" "}
-                  · 已完善 {readyCount}
-                  {pendingCount > 0 ? ` / 待完善 ${pendingCount}` : ""}
-                </span>
-              )}
-              {" "}
-              · 满足任一条件即触达
+              共 {weatherTriggerCategories.length} 类 · 已启用 {enabledCount} 项 ·
+              满足任一条件即触达
             </p>
           </SheetHeader>
 
@@ -115,10 +93,10 @@ export const WeatherTriggerEditor = ({ value, onChange, trigger }: Props) => {
               activeKey={activeKey}
               onSelect={setActiveKey}
               getStatus={tabTriggerStatus}
-              pendingBadge="待完善"
+              showPending={false}
               legend={{
                 ready: "已启用",
-                pending: "待完善条件",
+                pending: "",
                 disabled: "未启用",
               }}
             />
