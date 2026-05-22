@@ -29,7 +29,6 @@ export type CareModule = {
   colorVar: string; // CSS HSL var name without var()
   triggers: string[]; // 预制触发条件 / 节日 / 模板等
   templates: string[]; // 预制内容模板
-  consumeHint: string; // 引导消费
 };
 
 export const careModules: Record<CareType, CareModule> = {
@@ -42,7 +41,6 @@ export const careModules: Record<CareType, CareModule> = {
     colorVar: "--cat-7",
     triggers: ["生日当天 09:00", "生日前 1 天 18:00"],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "蛋糕商城 / 电影票 福利商城",
   },
   festival: {
     key: "festival",
@@ -53,7 +51,6 @@ export const careModules: Record<CareType, CareModule> = {
     colorVar: "--cat-4",
     triggers: ["春节", "端午节", "中秋节", "国庆节", "元旦", "妇女节", "劳动节"],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "悦享商城 / 电影关怀",
   },
   weather: {
     key: "weather",
@@ -64,7 +61,6 @@ export const careModules: Record<CareType, CareModule> = {
     colorVar: "--cat-9",
     triggers: ["高温 ≥ 35℃", "暴雨 / 雷暴", "暴雪 / 寒潮 ≤ -5℃", "空气质量 AQI ≥ 200"],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "无消费引导",
   },
   workload: {
     key: "workload",
@@ -80,7 +76,6 @@ export const careModules: Record<CareType, CareModule> = {
       "凌晨 0 点后仍在线",
     ],
     templates: ["✨ AI 动态生成"],
-    consumeHint: "去打车 / 点外卖",
   },
 };
 

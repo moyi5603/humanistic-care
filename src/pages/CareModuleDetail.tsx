@@ -9,9 +9,7 @@ import {
   Edit3,
   Trash2,
   Coins,
-  Zap,
   CheckCircle2,
-  ShoppingBag,
   TrendingUp,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -169,7 +167,6 @@ const CareModuleDetail = () => {
                 </section>
               )}
 
-              <ConsumeBanner mod={mod.consumeHint} colorVar={mod.colorVar} />
             </TabsContent>
 
             {/* 我的方案 Tab */}
@@ -553,38 +550,6 @@ const FunnelCard = ({ colorVar, reached }: { colorVar: string; reached: number }
         ))}
       </div>
     </section>
-  );
-};
-
-const ConsumeBanner = ({ mod, colorVar }: { mod: string; colorVar: string }) => {
-  if (mod === "无消费引导") return null;
-  return (
-    <div
-      className="mt-4 flex items-center gap-3 rounded-2xl p-3"
-      style={{
-        background: `linear-gradient(135deg, hsl(var(${colorVar}) / 0.14), hsl(var(${colorVar}) / 0.04))`,
-      }}
-    >
-      <div
-        className="flex h-10 w-10 items-center justify-center rounded-xl"
-        style={{
-          backgroundColor: `hsl(var(${colorVar}) / 0.2)`,
-          color: `hsl(var(${colorVar}))`,
-        }}
-      >
-        <ShoppingBag className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-foreground">福利消费引导</div>
-        <div className="truncate text-[11px] text-muted-foreground">{mod}</div>
-      </div>
-      <button
-        className="shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium text-primary-foreground shadow-soft"
-        style={{ background: `hsl(var(${colorVar}))` }}
-      >
-        <Zap className="mr-0.5 inline h-3 w-3" /> 去配置
-      </button>
-    </div>
   );
 };
 
