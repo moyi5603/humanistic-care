@@ -1103,11 +1103,14 @@ export const weatherCommuteGuides: Record<
   },
 };
 
+export type PreviewPerkAction = "jump" | "tip";
+
 export type WeatherPreviewPerk = {
   label: string;
   body: string;
   icon: LucideIcon;
   colorVar: string;
+  action: PreviewPerkAction;
 };
 
 export const getWeatherPreviewPerks = (
@@ -1121,12 +1124,14 @@ export const getWeatherPreviewPerks = (
       body: tip.body,
       icon: cat.icon,
       colorVar: cat.colorVar,
+      action: "tip",
     },
     {
       label: weatherCommuteGuides[key].label,
       body: weatherCommuteGuides[key].body,
       icon: Wind,
       colorVar: "--cat-3",
+      action: "tip",
     },
   ];
 };

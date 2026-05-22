@@ -13,6 +13,7 @@ import {
 import {
   getWeatherPreviewPerks,
   type CareType,
+  type PreviewPerkAction,
   type WeatherTriggerKey,
 } from "@/data/humanityCare";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,20 @@ export type PreviewConfig = {
   gradientFrom: string;
   gradientTo: string;
   ctaPrimary: string;
-  perks: { label: string; icon: LucideIcon; color: string }[];
+  perks: {
+    label: string;
+    icon: LucideIcon;
+    color: string;
+    action: PreviewPerkAction;
+  }[];
+};
+
+type DisplayPerk = {
+  label: string;
+  icon: LucideIcon;
+  colorVar: string;
+  action: PreviewPerkAction;
+  body?: string;
 };
 
 export const previewConfig: Record<CareType, PreviewConfig> = {
@@ -38,8 +52,8 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientTo: "hsl(20 90% 60%)",
     ctaPrimary: "🎁 查收生日礼包",
     perks: [
-      { label: "蛋糕商城", icon: Cake, color: "--cat-7" },
-      { label: "电影票", icon: Film, color: "--cat-4" },
+      { label: "蛋糕商城", icon: Cake, color: "--cat-7", action: "jump" },
+      { label: "电影票", icon: Film, color: "--cat-4", action: "jump" },
     ],
   },
   festival: {
@@ -51,8 +65,8 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientTo: "hsl(35 90% 58%)",
     ctaPrimary: "🎁 领取节日礼包",
     perks: [
-      { label: "悦享商城", icon: Gift, color: "--cat-4" },
-      { label: "电影关怀", icon: Film, color: "--cat-1" },
+      { label: "悦享商城", icon: Gift, color: "--cat-4", action: "jump" },
+      { label: "电影关怀", icon: Film, color: "--cat-1", action: "jump" },
     ],
   },
   weather: {
@@ -74,8 +88,8 @@ export const previewConfig: Record<CareType, PreviewConfig> = {
     gradientTo: "hsl(220 65% 50%)",
     ctaPrimary: "🎁 领取辛苦补贴",
     perks: [
-      { label: "去打车", icon: Gift, color: "--cat-2" },
-      { label: "点外卖", icon: HandHeart, color: "--cat-7" },
+      { label: "去打车", icon: Gift, color: "--cat-2", action: "jump" },
+      { label: "点外卖", icon: HandHeart, color: "--cat-7", action: "jump" },
     ],
   },
 };
@@ -91,8 +105,10 @@ type Props = {
   timeLabel?: string;
   /** 天气关怀：当前模拟的场景，决定贴士按钮文案与详情 */
   weatherScenario?: WeatherTriggerKey;
-  /** 点击福利按钮（由 IM 会话承接详情文案） */
-  onPerkClick?: (label: string, body: string) => void;
+  /** 天气贴士：点击后在 IM 中展示详情 */
+  onPerkTip?: (label: string, body: string) => void;
+  /** 福利跳转：蛋糕商城、打车等外链入口 */
+  onPerkJump?: (label: string) => void;
   /** 点击主按钮查收 */
   onReceiveClick?: () => void;
   /** 仅禁用主查收按钮（查收后仍可点福利贴士） */
@@ -110,21 +126,22 @@ export const CarePreviewCard = ({
   compact = false,
   timeLabel = "刚刚",
   weatherScenario = "extremeHeat",
-  onPerkClick,
+  onPerkTip,
+  onPerkJump,
   onReceiveClick,
   receiveDisabled = false,
   perkDisabled = false,
 }: Props) => {
   const cfg = previewConfig[moduleType];
   const Icon = cfg.icon;
-  const displayPerks =
+  const displayPerks: DisplayPerk[] =
     moduleType === "weather"
       ? getWeatherPreviewPerks(weatherScenario)
       : cfg.perks.map((p) => ({
           label: p.label,
-          body: "",
           icon: p.icon,
           colorVar: p.color,
+          action: p.action,
         }));
 
   return (
@@ -210,17 +227,19 @@ export const CarePreviewCard = ({
           <div className="flex gap-1.5">
             {displayPerks.map((p) => {
               const PI = p.icon;
+              const isJump = p.action === "jump";
               return (
                 <button
                   key={p.label}
                   type="button"
-                  disabled={perkDisabled || !p.body}
-                  onClick={() => p.body && onPerkClick?.(p.label, p.body)}
+                  disabled={perkDisabled}
+                  onClick={() => {
+                    if (isJump) onPerkJump?.(p.label);
+                    else if (p.body) onPerkTip?.(p.label, p.body);
+                  }}
                   className={cn(
-                    "flex flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 py-1.5 text-left transition-base active:scale-[0.98]",
-                    p.body
-                      ? "hover:bg-secondary/50"
-                      : "cursor-default opacity-60",
+                    "flex flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 py-1.5 text-left transition-base active:scale-[0.98] hover:bg-secondary/50",
+                    perkDisabled && "opacity-50",
                   )}
                 >
                   <div

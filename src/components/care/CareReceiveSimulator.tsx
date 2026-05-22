@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { CheckCircle2, HandHeart } from "lucide-react";
 import {
   careModules,
@@ -87,12 +88,16 @@ export const CareReceiveSimulator = ({
     setAnimating(true);
   };
 
-  const handlePerkClick = (_label: string, body: string) => {
-    if (animating || !body) return;
+  const handlePerkTip = (_label: string, body: string) => {
+    if (!body) return;
     setTimeline((prev) => [
       ...prev,
       { id: `tip-${Date.now()}-${prev.length}`, kind: "tip", text: body },
     ]);
+  };
+
+  const handlePerkJump = (label: string) => {
+    toast.info(`正在打开${label}…`, { duration: 2000 });
   };
 
   const handleAnimDone = () => {
@@ -115,7 +120,9 @@ export const CareReceiveSimulator = ({
         <ImBotBubble gradientFrom={cfg.gradientFrom} gradientTo={cfg.gradientTo}>
           <div className="font-medium">{promptByType[moduleType]}</div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
-            点击下方按钮完成查收，可先查看福利贴士 ↓
+            {moduleType === "weather"
+              ? "点击下方按钮完成查收，可先查看出行贴士 ↓"
+              : "点击下方按钮完成查收，福利入口可点击跳转 ↓"}
           </div>
         </ImBotBubble>
 
@@ -131,10 +138,10 @@ export const CareReceiveSimulator = ({
               weatherScenario={
                 moduleType === "weather" ? weatherScenario : undefined
               }
-              onPerkClick={handlePerkClick}
+              onPerkTip={handlePerkTip}
+              onPerkJump={handlePerkJump}
               onReceiveClick={handleReceiveClick}
               receiveDisabled={received || animating}
-              perkDisabled={animating}
             />
           </div>
         </div>
