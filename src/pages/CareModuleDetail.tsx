@@ -448,30 +448,25 @@ const StatCard = ({
 
 const trendDemoByPreset: Record<
   StatsTimeRange["preset"],
-  { title: string; labels: string[]; data: number[] }
+  { labels: string[]; data: number[] }
 > = {
   "7d": {
-    title: "近 7 日触达趋势",
     labels: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
     data: [42, 56, 38, 71, 84, 95, 63],
   },
   "30d": {
-    title: "近 30 日触达趋势",
     labels: ["第1周", "第2周", "第3周", "第4周", "第5周"],
     data: [198, 224, 186, 251, 217],
   },
   month: {
-    title: "本月触达趋势",
     labels: ["第1周", "第2周", "第3周", "第4周"],
     data: [156, 189, 172, 203],
   },
   year: {
-    title: "本年度触达趋势",
     labels: ["1月", "2月", "3月", "4月", "5月", "6月"],
     data: [320, 285, 410, 398, 452, 380],
   },
   custom: {
-    title: "区间触达趋势",
     labels: ["区间1", "区间2", "区间3", "区间4", "区间5", "区间6", "区间7"],
     data: [35, 48, 52, 44, 61, 58, 49],
   },
@@ -486,14 +481,14 @@ const TrendChart = ({
   range: StatsTimeRange;
 }) => {
   const chart = trendDemoByPreset[range.preset];
-  const { title, labels, data } = chart;
+  const { labels, data } = chart;
   const max = Math.max(...data);
   return (
     <section className="rounded-2xl bg-card p-4 shadow-soft">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <TrendingUp className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <h3 className="text-sm font-semibold text-foreground">触达趋势</h3>
         </div>
         <span className="text-[10px] text-muted-foreground">总计 {data.reduce((a, b) => a + b)}</span>
       </div>
