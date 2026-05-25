@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CalendarRange, CheckCircle2, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -159,7 +159,7 @@ export const StatsTimeRangePicker = ({ value, onChange, trigger }: Props) => {
   );
 };
 
-/** 数据统计 Tab 顶部筛选条（须 forwardRef 供 SheetTrigger asChild 使用） */
+/** 数据统计 Tab 顶部筛选（须 forwardRef 供 SheetTrigger asChild 使用） */
 export const StatsTimeRangeBar = React.forwardRef<
   HTMLButtonElement,
   {
@@ -171,28 +171,12 @@ export const StatsTimeRangeBar = React.forwardRef<
     type="button"
     {...props}
     className={cn(
-      "flex w-full items-center justify-between rounded-2xl bg-card px-3.5 py-2.5 shadow-soft transition-base active:scale-[0.99]",
+      "inline-flex max-w-full items-center gap-0.5 text-sm font-medium text-primary transition-base active:opacity-70",
       className,
     )}
   >
-    <div className="flex min-w-0 items-center gap-2.5 text-left">
-      <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-secondary"
-        aria-hidden
-      >
-        <CalendarRange className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <div className="min-w-0">
-        <div className="text-[10px] text-muted-foreground">统计时间</div>
-        <div className="truncate text-sm font-semibold text-foreground">
-          {summary.text}
-        </div>
-        <div className="truncate text-[10px] text-muted-foreground">
-          {summary.sub}
-        </div>
-      </div>
-    </div>
-    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+    <span className="truncate">{summary.text}</span>
+    <ChevronRight className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
   </button>
 ));
 StatsTimeRangeBar.displayName = "StatsTimeRangeBar";

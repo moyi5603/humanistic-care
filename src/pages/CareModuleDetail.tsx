@@ -52,6 +52,13 @@ const pointLabels: Record<CareType, string> = {
   workload: "辛苦补贴",
 };
 
+/** 演示用触达时间：年月日 + 时分 */
+const formatReachRecordTime = (hoursAgo: number) => {
+  const d = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const CareModuleDetail = () => {
   const navigate = useNavigate();
   const { type } = useParams<{ type: CareType }>();
@@ -122,11 +129,14 @@ const CareModuleDetail = () => {
 
             {/* 数据统计 Tab */}
             <TabsContent value="stats" className="mt-3 space-y-4">
-              <StatsTimeRangePicker
-                value={statsRange}
-                onChange={setStatsRange}
-                trigger={<StatsTimeRangeBar summary={statsRangeSummary} />}
-              />
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">统计时间</span>
+                <StatsTimeRangePicker
+                  value={statsRange}
+                  onChange={setStatsRange}
+                  trigger={<StatsTimeRangeBar summary={statsRangeSummary} />}
+                />
+              </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <StatCard icon={Bell} label="累计触达" value={scopedStats.reached.toLocaleString()} colorVar={mod.colorVar} />
@@ -157,8 +167,8 @@ const CareModuleDetail = () => {
                               {r.audience} · 已触达 {Math.floor(r.reached / i)} 人
                             </div>
                           </div>
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {i} 小时前
+                          <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
+                            {formatReachRecordTime(i)}
                           </span>
                         </li>
                       )),

@@ -10,8 +10,20 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
-import { useState } from "react";
-import { careModuleList, type CareType } from "@/data/humanityCare";
+import { useMemo, useState } from "react";
+import {
+  careModuleList,
+  defaultStatsTimeRange,
+  statsTimeRangeScale,
+  summarizeStatsTimeRange,
+  type CareType,
+  type StatsTimeRange,
+} from "@/data/humanityCare";
+import { useCareRules } from "@/data/careRulesStore";
+import {
+  StatsTimeRangeBar,
+  StatsTimeRangePicker,
+} from "@/components/care/StatsTimeRangePicker";
 import ChatInputBar from "@/components/agent/ChatInputBar";
 
 type Prompt = {
@@ -92,16 +104,54 @@ const promptGroups: { title: string; prompts: Prompt[] }[] = [
   },
 ];
 
-const stats = [
-  { label: "已配置方案", value: "12", icon: Settings, color: "--cat-1" },
-  { label: "本月触达", value: "1,684", icon: Bell, color: "--cat-7" },
-  { label: "覆盖员工", value: "1,286", icon: Users, color: "--cat-3" },
-  { label: "积分发放", value: "32,510", icon: TrendingUp, color: "--cat-6" },
-];
+const overviewBase = {
+  reached: 1684,
+  covered: 1286,
+  points: 32510,
+};
 
 const HumanityCare = () => {
   const navigate = useNavigate();
   const [promptIdx, setPromptIdx] = useState(0);
+  const allRules = useCareRules();
+  const [statsRange, setStatsRange] = useState<StatsTimeRange>(defaultStatsTimeRange);
+  const statsRangeSummary = summarizeStatsTimeRange(statsRange);
+  const rangeScale = statsTimeRangeScale(statsRange);
+
+  const overviewStats = useMemo(() => {
+    const reached = Math.max(1, Math.round(overviewBase.reached * rangeScale));
+    const covered = Math.max(
+      1,
+      Math.round(overviewBase.covered * Math.min(rangeScale * 2.5, 1)),
+    );
+    const points = Math.round(overviewBase.points * rangeScale);
+    return [
+      {
+        label: "已配置方案",
+        value: String(allRules.length),
+        icon: Settings,
+        color: "--cat-1",
+      },
+      {
+        label: "触达人次",
+        value: reached.toLocaleString(),
+        icon: Bell,
+        color: "--cat-7",
+      },
+      {
+        label: "覆盖员工",
+        value: covered.toLocaleString(),
+        icon: Users,
+        color: "--cat-3",
+      },
+      {
+        label: "积分发放",
+        value: points.toLocaleString(),
+        icon: TrendingUp,
+        color: "--cat-6",
+      },
+    ];
+  }, [allRules.length, rangeScale]);
 
   const refreshPrompts = () => setPromptIdx((i) => (i + 1) % promptGroups.length);
   const currentGroup = promptGroups[promptIdx];
@@ -125,12 +175,7 @@ const HumanityCare = () => {
             <div className="flex-1 text-center text-base font-semibold text-foreground">
               人文关怀
             </div>
-            <button
-              aria-label="设置"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground transition-base active:scale-95"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
+            <div className="h-10 w-10 shrink-0" aria-hidden />
           </div>
         </header>
 
@@ -155,8 +200,17 @@ const HumanityCare = () => {
           </section>
 
           {/* 数据概览 */}
-          <section className="grid grid-cols-4 gap-2">
-            {stats.map((s) => {
+          <section>
+            <div className="mb-2 flex items-center gap-1.5 px-0.5">
+              <span className="text-xs text-muted-foreground">统计周期</span>
+              <StatsTimeRangePicker
+                value={statsRange}
+                onChange={setStatsRange}
+                trigger={<StatsTimeRangeBar summary={statsRangeSummary} />}
+              />
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+            {overviewStats.map((s) => {
               const Icon = s.icon;
               return (
                 <div
@@ -177,6 +231,7 @@ const HumanityCare = () => {
                 </div>
               );
             })}
+            </div>
           </section>
 
           {/* 核心能力 */}
