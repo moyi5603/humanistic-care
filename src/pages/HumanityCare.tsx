@@ -10,7 +10,7 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import {
   careModuleList,
   defaultStatsTimeRange,
@@ -25,26 +25,67 @@ import {
   StatsTimeRangePicker,
 } from "@/components/care/StatsTimeRangePicker";
 import ChatInputBar from "@/components/agent/ChatInputBar";
+import {
+  HumanityCareAgentChat,
+  type CareChatMessage,
+} from "@/components/care/HumanityCareAgentChat";
+import {
+  dispatchHumanityCareAgent,
+  type AgentAction,
+  type PendingSession,
+} from "@/lib/humanityCareAgent";
+
+let msgCounter = 0;
+const nextMsgId = () => `hc-msg-${++msgCounter}`;
 
 type Prompt = {
   text: string;
   type: CareType;
-  /** action: new = 跳转新建页(可带预填); detail = 跳到模块详情页 */
-  action?: "new" | "detail";
+  /** action: new = 跳转新建页; detail = 模块详情; chat = 发送给 Agent */
+  action?: "new" | "detail" | "chat";
   query?: Record<string, string>;
 };
 
 const promptGroups: { title: string; prompts: Prompt[] }[] = [
   {
+    title: "📊 整体统计",
+    prompts: [
+      {
+        text: "本月一共发出了多少条关怀消息？",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
+        text: "哪个部门收到的生日关怀最多？",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
+        text: "积分发放排名前 10 的员工是谁？",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+    ],
+  },
+  {
     title: "🎂 生日关怀",
     prompts: [
       {
-        text: "为研发部下月过生日的同事创建关怀",
+        text: "帮我新建一个生日关怀规则",
         type: "birthday",
-        action: "new",
-        query: { audience: "研发中心", trigger: "生日当天 09:00", points: "50" },
+        action: "chat",
       },
-      { text: "查看本月生日关怀的触达情况", type: "birthday", action: "detail" },
+      { text: "查看本月生日关怀的触达情况", type: "birthday", action: "chat" },
+      {
+        text: "查询所有生日关怀规则",
+        type: "birthday",
+        action: "chat",
+      },
+      {
+        text: "把所有生日关怀规则的积分改为 50 分",
+        type: "birthday",
+        action: "chat",
+      },
       {
         text: "把生日祝福改成 AI 动态生成",
         type: "birthday",
@@ -112,7 +153,12 @@ const overviewBase = {
 
 const HumanityCare = () => {
   const navigate = useNavigate();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [promptIdx, setPromptIdx] = useState(0);
+  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<CareChatMessage[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [pending, setPending] = useState<PendingSession | null>(null);
   const allRules = useCareRules();
   const [statsRange, setStatsRange] = useState<StatsTimeRange>(defaultStatsTimeRange);
   const statsRangeSummary = summarizeStatsTimeRange(statsRange);
@@ -155,6 +201,51 @@ const HumanityCare = () => {
 
   const refreshPrompts = () => setPromptIdx((i) => (i + 1) % promptGroups.length);
   const currentGroup = promptGroups[promptIdx];
+  const hasChat = messages.length > 0;
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, isTyping]);
+
+  const handleAgentAction = (action: AgentAction) => {
+    if (action.type === "navigate" && action.payload) {
+      navigate(action.payload);
+    }
+  };
+
+  const sendToAgent = (text: string) => {
+    const q = text.trim();
+    if (!q) return;
+    setChatInput("");
+
+    const userMsg: CareChatMessage = {
+      id: nextMsgId(),
+      role: "user",
+      content: q,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsTyping(true);
+
+    window.setTimeout(() => {
+      const { reply, pending: nextPending, navigate: nav } =
+        dispatchHumanityCareAgent(q, pending);
+      setPending(nextPending);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextMsgId(),
+          role: "assistant",
+          content: reply.summary,
+          reply,
+        },
+      ]);
+      setIsTyping(false);
+      if (nav) navigate(nav);
+    }, 500 + Math.random() * 400);
+  };
 
   const goModule = (type: CareType) => navigate(`/agents/humanity-care/${type}`);
 
@@ -179,7 +270,18 @@ const HumanityCare = () => {
           </div>
         </header>
 
-        <main className="flex-1 space-y-4 overflow-y-auto px-3 pb-4 pt-2 scrollbar-hide">
+        <main
+          ref={scrollRef}
+          className="flex-1 space-y-4 overflow-y-auto px-3 pb-4 pt-2 scrollbar-hide"
+        >
+          {hasChat ? (
+            <HumanityCareAgentChat
+              messages={messages}
+              isTyping={isTyping}
+              onAction={handleAgentAction}
+            />
+          ) : (
+            <>
           {/* Hero 介绍卡片 */}
           <section className="relative overflow-hidden rounded-3xl p-5 text-primary-foreground shadow-glow gradient-banner">
             <div className="relative z-10">
@@ -304,6 +406,10 @@ const HumanityCare = () => {
             <ul className="space-y-1.5">
               {currentGroup.prompts.map((p) => {
                 const handleClick = () => {
+                  if (p.action === "chat") {
+                    sendToAgent(p.text);
+                    return;
+                  }
                   if (p.action === "detail") {
                     navigate(`/agents/humanity-care/${p.type}`);
                   } else {
@@ -328,9 +434,16 @@ const HumanityCare = () => {
               })}
             </ul>
           </section>
+            </>
+          )}
         </main>
 
-        <ChatInputBar />
+        <ChatInputBar
+          value={chatInput}
+          onChange={setChatInput}
+          onSubmit={sendToAgent}
+          placeholder="查询统计、管理生日关怀规则…"
+        />
       </div>
     </>
   );
