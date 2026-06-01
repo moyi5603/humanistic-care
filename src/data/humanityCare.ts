@@ -202,6 +202,7 @@ export const statsTimeRangeScale = (range: StatsTimeRange): number => {
 export type CareRuleFormData = {
   audience: {
     all: boolean;
+    selectMode?: "dept" | "emp";
     deptIds: string[];
     empIds: string[];
     tags: string[];
@@ -266,7 +267,13 @@ export const sampleRules: CareRule[] = [
     enabled: true,
     reached: 24,
     formData: {
-      audience: { all: false, deptIds: [], empIds: [], tags: [] },
+      audience: {
+        all: false,
+        selectMode: "dept",
+        deptIds: [],
+        empIds: [],
+        tags: [],
+      },
       weatherTrigger: {
         enabled: {
           extremeHeat: true,

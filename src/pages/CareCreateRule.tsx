@@ -19,6 +19,7 @@ import {
   AudiencePicker,
   emptyAudience,
   summarize as summarizeAudience,
+  normalizeAudience,
   type AudienceSelection,
 } from "@/components/care/AudiencePicker";
 import {
@@ -144,7 +145,8 @@ const CareCreateRule = () => {
   );
 
   const [audience, setAudience] = useState<AudienceSelection>(() => {
-    if (existingRule?.formData?.audience) return existingRule.formData.audience;
+    if (existingRule?.formData?.audience)
+      return normalizeAudience(existingRule.formData.audience);
     if (prefill.audience)
       return { ...emptyAudience, all: false, tags: [prefill.audience] };
     return emptyAudience;
@@ -400,7 +402,11 @@ const CareCreateRule = () => {
                     trigger={
                       <SummaryRow
                         icon={<Users className="h-3.5 w-3.5 text-muted-foreground" />}
-                        text={audienceSummary === "请选择关怀对象" ? "全公司员工" : audienceSummary}
+                        text={
+                          audienceSummary === "请选择关怀对象"
+                            ? "全公司员工"
+                            : audienceSummary
+                        }
                         sub={audienceRuleSummary}
                       />
                     }

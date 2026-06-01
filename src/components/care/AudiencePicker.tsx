@@ -10,7 +10,9 @@ import {
   Building2,
   UserRound,
   Sparkles,
+  Lock,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -26,9 +28,14 @@ import {
   type Employee,
 } from "@/data/contacts";
 
+/** 通讯录圈选方式：按部门（整部门） / 按员工（逐人勾选） */
+export type AudienceSelectMode = "dept" | "emp";
+
 export type AudienceSelection = {
   /** 是否选择了"全公司员工" */
   all: boolean;
+  /** 按部门 / 按员工 */
+  selectMode: AudienceSelectMode;
   deptIds: string[];
   empIds: string[];
   /** 扩展条件 tag, 如「入职 ≥ 3 个月」「岗位:研发」 */
@@ -37,10 +44,28 @@ export type AudienceSelection = {
 
 export const emptyAudience: AudienceSelection = {
   all: true,
+  selectMode: "dept",
   deptIds: [],
   empIds: [],
   tags: [],
 };
+
+export const normalizeAudience = (v: AudienceSelection): AudienceSelection => ({
+  ...v,
+  selectMode: v.selectMode ?? "dept",
+});
+
+/** 切换圈选方式并清空另一侧已选 */
+export const applyAudienceSelectMode = (
+  prev: AudienceSelection,
+  mode: AudienceSelectMode,
+): AudienceSelection => ({
+  ...normalizeAudience(prev),
+  selectMode: mode,
+  all: false,
+  deptIds: mode === "emp" ? [] : prev.deptIds,
+  empIds: mode === "dept" ? [] : prev.empIds,
+});
 
 type Props = {
   value: AudienceSelection;
@@ -84,18 +109,41 @@ const collectSubtreeEmpIds = (deptId: string): string[] => {
   return ALL_EMP.filter((e) => deptIds.has(e.deptId)).map((e) => e.id);
 };
 
+const isEmpCoveredByDeptSelection = (
+  emp: Employee,
+  draft: AudienceSelection,
+): boolean => {
+  if (draft.all) return true;
+  let current = flatDepts.find((d) => d.id === emp.deptId);
+  while (current) {
+    if (draft.deptIds.includes(current.id)) return true;
+    current = current.parentId
+      ? flatDepts.find((d) => d.id === current!.parentId)
+      : undefined;
+  }
+  return false;
+};
+
 const getDeptCheckState = (
   dept: Department,
   draft: AudienceSelection,
+  mode: AudienceSelectMode,
 ): CheckState => {
   const subtreeDeptIds = collectSubtreeDeptIds(dept);
+  if (mode === "dept") {
+    const selectedDeptCount = subtreeDeptIds.filter((id) =>
+      draft.deptIds.includes(id),
+    ).length;
+    if (selectedDeptCount === 0) return "unchecked";
+    if (selectedDeptCount === subtreeDeptIds.length) return "checked";
+    return "indeterminate";
+  }
   const subtreeEmpIds = collectSubtreeEmpIds(dept.id);
-  const selectedCount =
-    subtreeDeptIds.filter((id) => draft.deptIds.includes(id)).length +
-    subtreeEmpIds.filter((id) => draft.empIds.includes(id)).length;
-  const total = subtreeDeptIds.length + subtreeEmpIds.length;
-  if (selectedCount === 0) return "unchecked";
-  if (selectedCount === total) return "checked";
+  const selectedEmpCount = subtreeEmpIds.filter((id) =>
+    draft.empIds.includes(id),
+  ).length;
+  if (selectedEmpCount === 0) return "unchecked";
+  if (selectedEmpCount === subtreeEmpIds.length) return "checked";
   return "indeterminate";
 };
 
@@ -118,11 +166,18 @@ export const AudiencePicker = ({
   const handleOpenChange = (o: boolean) => {
     setOpen(o);
     if (o) {
-      setDraft(value);
+      setDraft(normalizeAudience(value));
       setExpandedIds(defaultExpandedIds());
       setKeyword("");
       setTab("contacts");
     }
+  };
+
+  const selectMode = draft.selectMode ?? "dept";
+
+  const setSelectMode = (mode: AudienceSelectMode) => {
+    if (mode === selectMode) return;
+    setDraft(applyAudienceSelectMode(draft, mode));
   };
 
   const toggleExpanded = (id: string) => {
@@ -148,9 +203,9 @@ export const AudiencePicker = ({
   }, [keyword]);
 
   const toggleDeptSubtree = (dept: Department) => {
+    if (selectMode === "emp") return;
     const subtreeDeptIds = collectSubtreeDeptIds(dept);
-    const subtreeEmpIds = collectSubtreeEmpIds(dept.id);
-    const state = getDeptCheckState(dept, draft);
+    const state = getDeptCheckState(dept, draft, "dept");
 
     setDraft((d) => {
       if (state === "checked") {
@@ -158,18 +213,17 @@ export const AudiencePicker = ({
           ...d,
           all: false,
           deptIds: d.deptIds.filter((id) => !subtreeDeptIds.includes(id)),
-          empIds: d.empIds.filter((id) => !subtreeEmpIds.includes(id)),
         };
       }
       return {
         ...d,
         all: false,
         deptIds: [...new Set([...d.deptIds, ...subtreeDeptIds])],
-        empIds: [...new Set([...d.empIds, ...subtreeEmpIds])],
       };
     });
   };
   const toggleEmp = (id: string) => {
+    if (selectMode === "dept") return;
     setDraft((d) => ({
       ...d,
       all: false,
@@ -185,14 +239,23 @@ export const AudiencePicker = ({
     }));
   };
   const setAll = () => {
-    setDraft({ all: true, deptIds: [], empIds: [], tags: draft.tags });
+    setDraft({
+      all: true,
+      selectMode,
+      deptIds: [],
+      empIds: [],
+      tags: draft.tags,
+    });
   };
 
-  const totalSelected =
-    (draft.all ? 1 : 0) + draft.deptIds.length + draft.empIds.length;
+  const totalSelected = draft.all
+    ? 1
+    : selectMode === "dept"
+      ? draft.deptIds.length
+      : draft.empIds.length;
 
   const handleConfirm = () => {
-    onChange(draft);
+    onChange(normalizeAudience(draft));
     setOpen(false);
   };
 
@@ -246,7 +309,6 @@ export const AudiencePicker = ({
 
           {tab === "contacts" && (
             <div className="flex flex-1 flex-col overflow-hidden">
-              {/* 全公司 + 搜索 */}
               <div className="space-y-2 px-4 pb-2 pt-3">
                 <button
                   onClick={setAll}
@@ -261,6 +323,7 @@ export const AudiencePicker = ({
                   </span>
                   {draft.all && <Check className="h-4 w-4" />}
                 </button>
+
                 <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
                   <Search className="h-3.5 w-3.5 text-muted-foreground" />
                   <input
@@ -275,6 +338,32 @@ export const AudiencePicker = ({
                     </button>
                   )}
                 </div>
+
+                <div className="flex items-center gap-1.5 pb-0.5">
+                  <span className="text-[10px] text-muted-foreground">圈选</span>
+                  <div className="inline-flex rounded-md bg-secondary/80 p-px">
+                    {(
+                      [
+                        { mode: "dept" as const, label: "部门" },
+                        { mode: "emp" as const, label: "员工" },
+                      ] as const
+                    ).map(({ mode, label }) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setSelectMode(mode)}
+                        className={cn(
+                          "rounded-[5px] px-2.5 py-0.5 text-[11px] font-medium transition-base",
+                          selectMode === mode
+                            ? "bg-card text-primary shadow-sm"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* 组织架构树 */}
@@ -285,6 +374,7 @@ export const AudiencePicker = ({
                     depts={searchResults.depts}
                     emps={searchResults.emps}
                     draft={draft}
+                    selectMode={selectMode}
                     onToggleDeptSubtree={toggleDeptSubtree}
                     onToggleEmp={toggleEmp}
                   />
@@ -296,6 +386,7 @@ export const AudiencePicker = ({
                         dept={d}
                         depth={0}
                         draft={draft}
+                        selectMode={selectMode}
                         expandedIds={expandedIds}
                         onToggleExpand={toggleExpanded}
                         onToggleDeptSubtree={toggleDeptSubtree}
@@ -359,14 +450,30 @@ export const AudiencePicker = ({
           <div className="border-t border-border bg-background/95 p-3 backdrop-blur">
             <div className="mb-2 flex items-center justify-between text-[11px]">
               <span className="text-muted-foreground">
-                已选 <span className="font-semibold text-foreground">{totalSelected}</span> 项
+                {draft.all ? (
+                  <>
+                    已选 <span className="font-semibold text-foreground">全公司</span>
+                  </>
+                ) : (
+                  <>
+                    已选{" "}
+                    <span className="font-semibold text-foreground">{totalSelected}</span>{" "}
+                    {selectMode === "dept" ? "个部门" : "人"}
+                  </>
+                )}
                 {draft.tags.length > 0 && (
                   <span className="ml-1">· {draft.tags.length} 个规则</span>
                 )}
               </span>
               <button
                 onClick={() =>
-                  setDraft({ all: false, deptIds: [], empIds: [], tags: [] })
+                  setDraft({
+                    all: false,
+                    selectMode,
+                    deptIds: [],
+                    empIds: [],
+                    tags: [],
+                  })
                 }
                 className="text-muted-foreground"
               >
@@ -400,43 +507,53 @@ export const AudiencePicker = ({
 /* ---------- 摘要 / 显示 ---------- */
 
 export const summarize = (v: AudienceSelection): string => {
-  if (v.all) return "全公司员工";
+  const sel = normalizeAudience(v);
+  if (sel.all) return "全公司员工";
+  const mode = sel.selectMode;
   const parts: string[] = [];
-  if (v.deptIds.length) {
-    const names = v.deptIds
+  if (mode === "dept" && sel.deptIds.length) {
+    const names = sel.deptIds
       .map((id) => flatDepts.find((d) => d.id === id)?.name)
       .filter(Boolean) as string[];
     parts.push(...names);
   }
-  if (v.empIds.length) {
-    const names = v.empIds
+  if (mode === "emp" && sel.empIds.length) {
+    const names = sel.empIds
       .map((id) => ALL_EMP.find((e) => e.id === id)?.name)
       .filter(Boolean) as string[];
     parts.push(...names);
   }
   if (!parts.length) return "请选择关怀对象";
-  if (parts.length <= 2) return parts.join("、");
-  return `${parts.slice(0, 2).join("、")} 等 ${parts.length} 项`;
+  const prefix = mode === "dept" ? "部门·" : "员工·";
+  if (parts.length <= 2) return prefix + parts.join("、");
+  return `${prefix}${parts.slice(0, 2).join("、")} 等 ${parts.length} 项`;
 };
 
 const SelectedPreview = ({ value }: { value: AudienceSelection }) => {
-  const deptNames = value.deptIds
+  const sel = normalizeAudience(value);
+  const deptNames = sel.selectMode === "dept"
+    ? sel.deptIds
+    : [];
+  const empNames = sel.selectMode === "emp"
+    ? sel.empIds
+    : [];
+  const deptRows = deptNames
     .map((id) => flatDepts.find((d) => d.id === id))
     .filter(Boolean) as Department[];
-  const empNames = value.empIds
+  const empRows = empNames
     .map((id) => ALL_EMP.find((e) => e.id === id))
     .filter(Boolean) as Employee[];
 
   const chips: { key: string; label: string; type: "all" | "dept" | "emp" | "tag" }[] = [];
-  if (value.all) chips.push({ key: "all", label: "全公司员工", type: "all" });
-  deptNames.forEach((d) =>
+  if (sel.all) chips.push({ key: "all", label: "全公司员工", type: "all" });
+  deptRows.forEach((d) =>
     chips.push({ key: `d-${d.id}`, label: d.name, type: "dept" }),
   );
-  empNames.forEach((e) =>
+  empRows.forEach((e) =>
     chips.push({ key: `e-${e.id}`, label: e.name, type: "emp" }),
   );
 
-  if (!chips.length && !value.tags.length) return null;
+  if (!chips.length && !sel.tags.length) return null;
 
   const MAX = 4;
   const visible = chips.slice(0, MAX);
@@ -469,9 +586,9 @@ const SelectedPreview = ({ value }: { value: AudienceSelection }) => {
           )}
         </div>
       )}
-      {value.tags.length > 0 && (
+      {sel.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {value.tags.map((t) => (
+          {sel.tags.map((t) => (
             <span
               key={t}
               className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground"
@@ -491,24 +608,35 @@ const TriStateCheckbox = ({
   state,
   onToggle,
   label,
+  disabled = false,
 }: {
   state: CheckState;
   onToggle: () => void;
   label: string;
+  disabled?: boolean;
 }) => (
   <button
     type="button"
+    disabled={disabled}
     onClick={(e) => {
       e.stopPropagation();
-      onToggle();
+      if (!disabled) onToggle();
     }}
-    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-      state === "unchecked"
-        ? "border-border bg-background"
-        : "border-primary bg-primary text-primary-foreground"
-    }`}
+    className={cn(
+      "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+      disabled && "cursor-not-allowed opacity-40",
+      !disabled &&
+        (state === "unchecked"
+          ? "border-border bg-background"
+          : "border-primary bg-primary text-primary-foreground"),
+      disabled &&
+        state !== "unchecked" &&
+        "border-muted-foreground/40 bg-muted text-muted-foreground",
+      disabled && state === "unchecked" && "border-border/60 bg-muted/50",
+    )}
     aria-label={label}
     aria-checked={state === "indeterminate" ? "mixed" : state === "checked"}
+    aria-disabled={disabled}
   >
     {state === "checked" && <Check className="h-3 w-3" strokeWidth={3} />}
     {state === "indeterminate" && <Minus className="h-3 w-3" strokeWidth={3} />}
@@ -519,6 +647,7 @@ const DeptTreeNode = ({
   dept,
   depth,
   draft,
+  selectMode,
   expandedIds,
   onToggleExpand,
   onToggleDeptSubtree,
@@ -527,6 +656,7 @@ const DeptTreeNode = ({
   dept: Department;
   depth: number;
   draft: AudienceSelection;
+  selectMode: AudienceSelectMode;
   expandedIds: Set<string>;
   onToggleExpand: (id: string) => void;
   onToggleDeptSubtree: (dept: Department) => void;
@@ -536,7 +666,8 @@ const DeptTreeNode = ({
   const emps = ALL_EMP.filter((e) => e.deptId === dept.id);
   const hasContent = hasChildren || emps.length > 0;
   const expanded = expandedIds.has(dept.id);
-  const checkState = getDeptCheckState(dept, draft);
+  const checkState = getDeptCheckState(dept, draft, selectMode);
+  const deptCheckboxDisabled = selectMode === "emp";
 
   return (
     <li>
@@ -545,9 +676,10 @@ const DeptTreeNode = ({
         style={{ paddingLeft: depth * 16 + 8 }}
       >
         <TriStateCheckbox
-          state={checkState}
+          state={deptCheckboxDisabled ? "unchecked" : checkState}
           onToggle={() => onToggleDeptSubtree(dept)}
           label={`选择${dept.name}`}
+          disabled={deptCheckboxDisabled}
         />
         <button
           type="button"
@@ -578,6 +710,7 @@ const DeptTreeNode = ({
               dept={child}
               depth={depth + 1}
               draft={draft}
+              selectMode={selectMode}
               expandedIds={expandedIds}
               onToggleExpand={onToggleExpand}
               onToggleDeptSubtree={onToggleDeptSubtree}
@@ -589,7 +722,12 @@ const DeptTreeNode = ({
               key={e.id}
               emp={e}
               depth={depth + 1}
-              checked={draft.empIds.includes(e.id)}
+              checked={
+                selectMode === "dept"
+                  ? isEmpCoveredByDeptSelection(e, draft)
+                  : draft.empIds.includes(e.id)
+              }
+              disabled={selectMode === "dept"}
               onToggle={() => onToggleEmp(e.id)}
             />
           ))}
@@ -602,19 +740,23 @@ const DeptTreeNode = ({
 const DeptRow = ({
   dept,
   draft,
+  selectMode,
   onToggleDeptSubtree,
 }: {
   dept: Department;
   draft: AudienceSelection;
+  selectMode: AudienceSelectMode;
   onToggleDeptSubtree: (dept: Department) => void;
 }) => {
-  const checkState = getDeptCheckState(dept, draft);
+  const checkState = getDeptCheckState(dept, draft, selectMode);
+  const disabled = selectMode === "emp";
   return (
     <li className="flex items-center gap-1 rounded-xl px-2 py-2 active:bg-secondary/60">
       <TriStateCheckbox
-        state={checkState}
+        state={disabled ? "unchecked" : checkState}
         onToggle={() => onToggleDeptSubtree(dept)}
         label={`选择${dept.name}`}
+        disabled={disabled}
       />
       <span className="ml-1 flex flex-1 items-center gap-1.5">
         <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -631,35 +773,68 @@ const EmpRow = ({
   emp,
   depth = 0,
   checked,
+  disabled = false,
   onToggle,
 }: {
   emp: Employee;
   depth?: number;
   checked: boolean;
+  disabled?: boolean;
   onToggle: () => void;
 }) => (
   <li>
     <button
-      onClick={onToggle}
-      className="flex w-full items-center gap-2 rounded-xl py-2 text-left active:bg-secondary/60"
+      type="button"
+      disabled={disabled}
+      onClick={() => !disabled && onToggle()}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-xl py-2 text-left",
+        disabled ? "cursor-default opacity-55" : "active:bg-secondary/60",
+      )}
       style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: 8 }}
     >
       <span
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-          checked
-            ? "border-primary bg-primary text-primary-foreground"
-            : "border-border bg-background"
-        }`}
+        className={cn(
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+          disabled &&
+            checked &&
+            "border-muted-foreground/40 bg-muted text-muted-foreground",
+          disabled &&
+            !checked &&
+            "border-border/50 bg-muted/40",
+          !disabled &&
+            checked &&
+            "border-primary bg-primary text-primary-foreground",
+          !disabled && !checked && "border-border bg-background",
+        )}
       >
         {checked && <Check className="h-3 w-3" strokeWidth={3} />}
       </span>
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-medium text-foreground">
+      <span
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
+          disabled ? "bg-muted text-muted-foreground" : "bg-secondary text-foreground",
+        )}
+      >
         {emp.name.slice(-2)}
       </span>
-      <span className="flex-1">
-        <span className="block text-sm text-foreground">{emp.name}</span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block text-sm",
+            disabled ? "text-muted-foreground" : "text-foreground",
+          )}
+        >
+          {emp.name}
+        </span>
         <span className="block text-[11px] text-muted-foreground">
           {emp.position}
+          {disabled && (
+            <span className="ml-1 inline-flex items-center gap-0.5 text-[10px]">
+              <Lock className="h-2.5 w-2.5" />
+              随部门
+            </span>
+          )}
         </span>
       </span>
     </button>
@@ -685,6 +860,7 @@ const SearchResults = ({
   depts,
   emps,
   draft,
+  selectMode,
   onToggleDeptSubtree,
   onToggleEmp,
 }: {
@@ -692,6 +868,7 @@ const SearchResults = ({
   depts: Department[];
   emps: Employee[];
   draft: AudienceSelection;
+  selectMode: AudienceSelectMode;
   onToggleDeptSubtree: (dept: Department) => void;
   onToggleEmp: (id: string) => void;
 }) => {
@@ -717,6 +894,7 @@ const SearchResults = ({
                   key={d.id}
                   dept={full}
                   draft={draft}
+                  selectMode={selectMode}
                   onToggleDeptSubtree={onToggleDeptSubtree}
                 />
               );
@@ -734,7 +912,12 @@ const SearchResults = ({
               <EmpRow
                 key={e.id}
                 emp={e}
-                checked={draft.empIds.includes(e.id)}
+                checked={
+                  selectMode === "dept"
+                    ? isEmpCoveredByDeptSelection(e, draft)
+                    : draft.empIds.includes(e.id)
+                }
+                disabled={selectMode === "dept"}
                 onToggle={() => onToggleEmp(e.id)}
               />
             ))}
