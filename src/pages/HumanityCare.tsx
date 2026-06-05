@@ -51,7 +51,12 @@ const promptGroups: { title: string; prompts: Prompt[] }[] = [
     title: "📊 整体统计",
     prompts: [
       {
-        text: "本月一共发出了多少条关怀消息？",
+        text: "本月一共发送了多少条关怀消息？",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
+        text: "查看积分发放总量",
         type: "birthday" as CareType,
         action: "chat" as const,
       },
@@ -64,6 +69,41 @@ const promptGroups: { title: string; prompts: Prompt[] }[] = [
         text: "积分发放排名前 10 的员工是谁？",
         type: "birthday" as CareType,
         action: "chat" as const,
+      },
+      {
+        text: "哪些员工还没收到生日关怀",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
+        text: "各关怀类型占比是多少？",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+    ],
+  },
+  {
+    title: "⚙️ 规则管理",
+    prompts: [
+      {
+        text: "目前已有多少个关怀方案，启用和停用各几个？",
+        type: "birthday",
+        action: "chat",
+      },
+      {
+        text: "停用全员生日祝福规则",
+        type: "birthday",
+        action: "chat",
+      },
+      {
+        text: "查询全员生日祝福规则详情",
+        type: "birthday",
+        action: "chat",
+      },
+      {
+        text: "批量启用生日关怀规则",
+        type: "birthday",
+        action: "chat",
       },
     ],
   },

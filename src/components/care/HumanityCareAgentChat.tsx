@@ -1,10 +1,54 @@
 import { Bot } from "lucide-react";
 import type {
   AgentAction,
+  AgentPieChart,
   AgentTable,
   HumanityCareAgentReply,
 } from "@/lib/humanityCareAgent";
 import { cn } from "@/lib/utils";
+
+const PIE_COLORS = [
+  "hsl(var(--cat-7))",
+  "hsl(var(--cat-4))",
+  "hsl(var(--cat-9))",
+  "hsl(var(--cat-2))",
+];
+
+const buildPieGradient = (slices: AgentPieChart["slices"]) => {
+  let acc = 0;
+  const stops = slices.map((slice, i) => {
+    const start = acc;
+    acc += slice.value;
+    return `${PIE_COLORS[i % PIE_COLORS.length]} ${start}% ${acc}%`;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
+};
+
+const AgentPieChartView = ({ chart }: { chart: AgentPieChart }) => (
+  <div className="rounded-xl border border-border/60 bg-card p-3">
+    <div className="flex items-center gap-3">
+      <div
+        className="h-[88px] w-[88px] shrink-0 rounded-full shadow-soft"
+        style={{ background: buildPieGradient(chart.slices) }}
+        aria-hidden
+      />
+      <ul className="min-w-0 flex-1 space-y-1.5 text-[11px]">
+        {chart.slices.map((slice, i) => (
+          <li key={slice.name} className="flex items-center gap-1.5">
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+            />
+            <span className="truncate text-foreground">{slice.name}</span>
+            <span className="ml-auto shrink-0 font-medium text-foreground">
+              {slice.value}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </div>
+);
 
 export type CareChatMessage = {
   id: string;
@@ -66,7 +110,8 @@ const AssistantBubble = ({
         <div className="whitespace-pre-wrap rounded-2xl rounded-tl-md bg-card px-3.5 py-2.5 text-sm text-foreground shadow-soft">
           {reply.summary}
         </div>
-        {reply.list && reply.list.length > 0 && (
+        {reply.pieChart && <AgentPieChartView chart={reply.pieChart} />}
+        {reply.list && reply.list.length > 0 && !reply.pieChart && (
           <ul className="space-y-1 rounded-xl bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
             {reply.list.map((item) => (
               <li key={item} className="flex gap-1.5">
