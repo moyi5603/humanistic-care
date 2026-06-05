@@ -3,12 +3,7 @@ import {
   type CareRule,
   type CareType,
 } from "@/data/humanityCare";
-import {
-  deleteCareRule,
-  getCareRulesSnapshot,
-  setCareRuleEnabled,
-  upsertCareRule,
-} from "@/data/careRulesStore";
+import { getCareRulesSnapshot } from "@/data/careRulesStore";
 
 export type AgentTable = {
   headers: string[];
@@ -57,32 +52,14 @@ export type StatsIntent =
   | "dept_rank"
   | "points_rank";
 
+export type ManageIntent = "delete" | "modify" | "query" | "enable" | "disable";
+
 export type PendingSession =
-  | { kind: "delete_confirm"; ruleId: string; ruleName: string }
+  | { kind: "pick_manage_target"; intent: ManageIntent }
   | {
-      kind: "toggle_confirm";
-      ruleId: string;
-      ruleName: string;
-      enable: boolean;
-    }
-  | {
-      kind: "batch_toggle_confirm";
-      careType: CareType | "all";
-      enable: boolean;
-      count: number;
-    }
-  | {
-      kind: "pick_rule";
-      intent:
-        | "modify"
-        | "delete"
-        | "detail"
-        | "toggle"
-        | "nav_modify"
-        | "nav_detail";
+      kind: "pick_manage_rule";
+      intent: ManageIntent;
       candidates: CareRule[];
-      modifyDraft?: { points?: number; triggerTime?: string };
-      enable?: boolean;
     }
   | {
       kind: "pick_care_type";
@@ -100,12 +77,6 @@ export type PendingSession =
       intent: "messages_count" | "points_total";
       timeRange: TimeRangeKey;
       candidates?: CareRule[];
-    }
-  | {
-      kind: "modify_confirm";
-      ruleId: string;
-      ruleName: string;
-      changes: { points?: number; triggerTime?: string };
     };
 
 const careTypeLabel: Record<CareType, string> = {
@@ -184,12 +155,13 @@ const globalStatsDemo = {
 /** 口语同义词归一，便于意图匹配 */
 const normalizeQuery = (q: string) =>
   q
-    .replace(/创建|新增|添加|建立|配置一条/g, "新建")
-    .replace(/移除|删掉|作废|去掉/g, "删除")
-    .replace(/编辑|调整|改动|更新/g, "修改")
-    .replace(/开启|上线|打开生效/g, "启用")
-    .replace(/关闭|下线|暂停|失效/g, "停用")
-    .replace(/查一查|看一看|计算/g, "查看")
+    .replace(/创建|新增|添加|建立|配置一条|配一个|加一个/g, "新建")
+    .replace(/移除|删掉|作废|去掉|不要了|干掉|清除/g, "删除")
+    .replace(/编辑|调整|改动|更新|变更|改一下|改下|设置一下|设置下/g, "修改")
+    .replace(/开启|上线|打开生效|恢复|开起来|重新开|重新启用/g, "启用")
+    .replace(/关闭|下线|暂停|失效|停掉|停了|关停|先停|先关/g, "停用")
+    .replace(/查一查|看一看|瞅一眼|了解下|介绍一下|告诉我|什么情况|怎么样/g, "查看")
+    .replace(/查一下|查查|查询一下/g, "查询")
     .replace(/合计|总共|一共多少/g, "总量")
     .replace(/平均每人|单个人均值/g, "人均")
     .replace(/TOP|榜单前|最多的/g, "排名前")
@@ -203,27 +175,105 @@ const normalizeQuery = (q: string) =>
 
 const extractQuoted = (q: string) => {
   const m = q.match(/[「『"']([^」』"']+)[」』"']/);
-  return m?.[1];
+  if (m?.[1]) return m[1];
+  const named = q.match(
+    /(?:名叫|叫做|名为|方案名(?:称)?[是为:：]?|名称[是为:：]?|叫)([^\s,，。！？!?]+)/,
+  );
+  return named?.[1];
 };
 
-const extractRuleName = (q: string) => {
+const MANAGE_SCOPE_RE =
+  /关怀|规则|方案|配置|策略|计划|那条|这条|这个|该项|那一项/;
+
+const isStatsLikeQuery = (q: string) =>
+  /触达情况|触达了多少|触达了多少人|触达人次|本月.*触达|本周.*触达|今年.*触达|发送了多少|发了多少|多少条.*消息|消息.*多少|发送统计|积分发放|积分总量|覆盖.*人|占比|排名|人均|消费引导|点击率|还没收到|未收到/.test(
+    q,
+  );
+
+const parseManageIntent = (q: string): ManageIntent | undefined => {
+  if (/删除/.test(q)) return "delete";
+  if (/修改/.test(q)) return "modify";
+  if (/停用/.test(q)) return "disable";
+  if (/启用/.test(q)) return "enable";
+  if (
+    /查询|查看|详情|资料|信息|内容|是什么|有哪些|有什么|配置情况/.test(q) &&
+    !isStatsLikeQuery(q)
+  ) {
+    return "query";
+  }
+  return undefined;
+};
+
+const stripForNameMatch = (q: string) => {
+  let s = q;
+  s = s.replace(
+    /帮我|请|麻烦|能不能|可不可以|可以|想要|我想|我要|把|将|给|先|一下|一下子/g,
+    "",
+  );
+  s = s.replace(
+    /删除|修改|启用|停用|查看|查询|详情|批量|一下|一下子|看看|了解|介绍|告诉|什么|怎么样|情况|资料|信息|内容|配置|策略|计划|那条|这条|这个/g,
+    "",
+  );
+  s = s.replace(/规则|方案|关怀|配置|策略|计划/g, "");
+  for (const label of Object.values(careTypeLabel)) {
+    s = s.replace(new RegExp(label, "g"), "");
+  }
+  for (const mod of Object.values(careModules)) {
+    s = s.replace(new RegExp(mod.short, "g"), "");
+  }
+  return s.replace(/[的了吗呢啊吧嘛,，。！？!?\s]+/g, "").trim();
+};
+
+const fuzzyNameMatch = (ruleName: string, hint: string) => {
+  const h = hint.trim();
+  if (!h || h.length < 2) return false;
+  if (ruleName === h || ruleName.includes(h) || h.includes(ruleName)) return true;
+  return false;
+};
+
+const findRulesByNameHint = (q: string, pool: CareRule[]): CareRule[] => {
   const quoted = extractQuoted(q);
-  if (quoted) return quoted;
-  const rules = getCareRulesSnapshot();
-  const byName = rules.find((r) => q.includes(r.name));
-  return byName?.name;
+  if (quoted) {
+    const matched = pool.filter((r) => fuzzyNameMatch(r.name, quoted));
+    if (matched.length) return matched;
+  }
+
+  const direct = pool.filter((r) => q.includes(r.name));
+  if (direct.length) return direct;
+
+  const cleaned = stripForNameMatch(q);
+  if (cleaned.length >= 2) {
+    const byCleaned = pool.filter((r) => fuzzyNameMatch(r.name, cleaned));
+    if (byCleaned.length) return byCleaned;
+  }
+
+  const partial: CareRule[] = [];
+  for (const rule of pool) {
+    for (let len = Math.min(rule.name.length, 8); len >= 2; len--) {
+      for (let i = 0; i <= rule.name.length - len; i++) {
+        const sub = rule.name.slice(i, i + len);
+        if (q.includes(sub)) {
+          partial.push(rule);
+          break;
+        }
+      }
+      if (partial.includes(rule)) break;
+    }
+  }
+  return partial;
+};
+
+const matchesManageScope = (q: string, rules: CareRule[]) => {
+  if (MANAGE_SCOPE_RE.test(q)) return true;
+  if (parseCareType(q)) return true;
+  if (extractQuoted(q)) return true;
+  if (findRulesByNameHint(q, rules).length > 0) return true;
+  return false;
 };
 
 const extractPoints = (q: string) => {
   const m = q.match(/(\d+)\s*分/);
   return m ? Number(m[1]) : undefined;
-};
-
-const extractTriggerTime = (q: string) => {
-  if (/生日当天\s*09:00|当天\s*09:00/.test(q)) return "生日当天 09:00";
-  if (/生日前\s*1\s*天|前\s*1\s*天\s*18:00/.test(q)) return "生日前 1 天 18:00";
-  const m = q.match(/改为\s*(.+触达|生日.+?\d{2}:\d{2})/);
-  return m?.[1];
 };
 
 const parseCareType = (q: string): CareType | "all" | undefined => {
@@ -256,30 +306,205 @@ const ruleEditPath = (rule: CareRule) =>
 
 const moduleListPath = (type: CareType) => `/agents/humanity-care/${type}`;
 
-const moduleNewPath = (type: CareType, qs?: URLSearchParams) =>
-  `/agents/humanity-care/${type}/new${qs?.toString() ? `?${qs}` : ""}`;
+const askClarify = (field: string, examples: string, extra?: string): HumanityCareAgentReply => ({
+  summary: `请先明确${field}。`,
+  list: [`可回复：${examples}`, ...(extra ? [extra] : [])],
+});
 
-const matchRules = (
+const withNavigateActions = (
+  text: string,
+  actions: AgentAction[],
+): HumanityCareAgentReply => ({
+  summary: actions.length ? `${text}请点击下方按钮继续。` : text,
+  actions,
+});
+
+const manageVerb: Record<ManageIntent, string> = {
+  delete: "删除",
+  modify: "修改",
+  query: "查看",
+  enable: "启用",
+  disable: "停用",
+};
+
+const manageTargetField: Record<ManageIntent, string> = {
+  delete: "要删除的关怀类型或方案名称",
+  modify: "要修改的关怀类型或方案名称",
+  query: "要查看的关怀类型或方案名称",
+  enable: "要启用的关怀类型或方案名称",
+  disable: "要停用的关怀类型或方案名称",
+};
+
+const askManageTarget = (intent: ManageIntent): HumanityCareAgentReply =>
+  askClarify(manageTargetField[intent], "生日关怀、全员生日祝福、ABC");
+
+const usesDetailPage = (intent: ManageIntent) =>
+  intent === "modify" || intent === "query";
+
+type ManageTarget =
+  | { kind: "type"; careType: CareType }
+  | { kind: "rule"; careType: CareType; ruleName: string }
+  | { kind: "ambiguous"; candidates: CareRule[] };
+
+const resolveManageTarget = (q: string, rules: CareRule[]): ManageTarget | undefined => {
+  const careType = parseCareType(q);
+  const scopedPool =
+    careType && careType !== "all"
+      ? rules.filter((r) => r.type === careType)
+      : rules;
+
+  const scopedMatches = findRulesByNameHint(q, scopedPool);
+  if (scopedMatches.length === 1) {
+    return {
+      kind: "rule",
+      careType: scopedMatches[0].type,
+      ruleName: scopedMatches[0].name,
+    };
+  }
+  if (scopedMatches.length > 1) {
+    return { kind: "ambiguous", candidates: scopedMatches };
+  }
+
+  if (careType && careType !== "all") return { kind: "type", careType };
+
+  const globalMatches = findRulesByNameHint(q, rules);
+  if (globalMatches.length === 1) {
+    return {
+      kind: "rule",
+      careType: globalMatches[0].type,
+      ruleName: globalMatches[0].name,
+    };
+  }
+  if (globalMatches.length > 1) {
+    return { kind: "ambiguous", candidates: globalMatches };
+  }
+
+  return undefined;
+};
+
+const buildManageNavigateReply = (
+  intent: ManageIntent,
+  careType: CareType,
+  rule?: CareRule,
+): HumanityCareAgentReply => {
+  const verb = manageVerb[intent];
+
+  if (rule && usesDetailPage(intent)) {
+    return withNavigateActions(
+      `已定位方案「${rule.name}」，请前往详情页${verb}。`,
+      [{ label: "打开规则详情", type: "navigate", payload: ruleEditPath(rule) }],
+    );
+  }
+
+  const path = moduleListPath(careType);
+  const text = rule
+    ? `已定位方案「${rule.name}」，请前往${careTypeLabel[careType]}列表完成${verb}。`
+    : `请前往${careTypeLabel[careType]}列表选择要${verb}的方案。`;
+  return withNavigateActions(text, [
+    { label: `打开${careTypeLabel[careType]}列表`, type: "navigate", payload: path },
+  ]);
+};
+
+const buildQueryRuleReply = (rule: CareRule): HumanityCareAgentReply => {
+  const detail = buildRuleDetailReply(rule);
+  return {
+    ...detail,
+    summary: `${detail.summary}请点击下方按钮查看详情。`,
+    actions: [{ label: "打开规则详情", type: "navigate", payload: ruleEditPath(rule) }],
+  };
+};
+
+const ambiguousManageSummary = (intent: ManageIntent) =>
+  `匹配到多个方案，请先明确要${manageVerb[intent]}的方案（可回复序号或名称）。`;
+
+const managePickTable = (intent: ManageIntent, candidates: CareRule[]): AgentTable => {
+  if (intent === "enable" || intent === "disable") {
+    return {
+      headers: ["序号", "方案名称", "状态"],
+      rows: candidates.map((r, i) => [
+        String(i + 1),
+        r.name,
+        r.enabled ? "已启用" : "已停用",
+      ]),
+    };
+  }
+  return {
+    headers: ["序号", "方案名称", "关怀类型"],
+    rows: candidates.map((r, i) => [
+      String(i + 1),
+      r.name,
+      careTypeLabel[r.type],
+    ]),
+  };
+};
+
+const replyManageTarget = (
   q: string,
   rules: CareRule[],
-  careType?: CareType,
-): CareRule[] => {
-  let pool = careType ? rules.filter((r) => r.type === careType) : rules;
-  const quoted = extractQuoted(q);
-  if (quoted) {
-    const matched = pool.filter((r) => r.name.includes(quoted));
-    if (matched.length) return matched;
+  intent: ManageIntent,
+): { reply: HumanityCareAgentReply; pending: PendingSession | null } => {
+  const resolved = resolveManageTarget(q, rules);
+  if (!resolved) {
+    return {
+      reply: askManageTarget(intent),
+      pending: { kind: "pick_manage_target", intent },
+    };
   }
-  const name = extractRuleName(q);
-  if (name) {
-    const matched = pool.filter((r) => r.name.includes(name));
-    if (matched.length) return matched;
+  if (resolved.kind === "ambiguous") {
+    return {
+      reply: {
+        summary: ambiguousManageSummary(intent),
+        table: managePickTable(intent, resolved.candidates),
+      },
+      pending: {
+        kind: "pick_manage_rule",
+        intent,
+        candidates: resolved.candidates,
+      },
+    };
   }
-  if (/所有|全部/.test(q) && careType) return pool;
-  const byPartial = pool.filter((r) => q.includes(r.name));
-  if (byPartial.length) return byPartial;
-  return pool;
+  if (resolved.kind === "rule") {
+    const rule = rules.find(
+      (r) => r.type === resolved.careType && r.name === resolved.ruleName,
+    );
+    if (intent === "query" && rule) {
+      return { reply: buildQueryRuleReply(rule), pending: null };
+    }
+    return {
+      reply: buildManageNavigateReply(intent, resolved.careType, rule),
+      pending: null,
+    };
+  }
+  return {
+    reply: buildManageNavigateReply(intent, resolved.careType),
+    pending: null,
+  };
 };
+
+const replyPickedManageRule = (
+  picked: CareRule,
+  intent: ManageIntent,
+): { reply: HumanityCareAgentReply; pending: null } => {
+  if (intent === "query") {
+    return { reply: buildQueryRuleReply(picked), pending: null };
+  }
+  return {
+    reply: buildManageNavigateReply(intent, picked.type, picked),
+    pending: null,
+  };
+};
+
+const tryDispatchManage = (
+  q: string,
+  rules: CareRule[],
+): { reply: HumanityCareAgentReply; pending: PendingSession | null } | null => {
+  const intent = parseManageIntent(q);
+  if (!intent || !matchesManageScope(q, rules)) return null;
+  return replyManageTarget(q, rules, intent);
+};
+
+const moduleNewPath = (type: CareType, qs?: URLSearchParams) =>
+  `/agents/humanity-care/${type}/new${qs?.toString() ? `?${qs}` : ""}`;
 
 const scaleByTime = (base: number, range: TimeRangeKey) =>
   Math.max(1, Math.round(base * timeRangeScale[range]));
@@ -514,27 +739,25 @@ const buildUnpaidBirthdayReply = (): HumanityCareAgentReply => {
   };
 };
 
-const askTimeRange = (intent: StatsIntent, careType?: CareType | "all"): HumanityCareAgentReply => ({
-  summary: "请先说明统计时间范围，例如：今日、本周、本月、上月或今年。",
-  list: [
-    careType === undefined ? "若涉及具体关怀类型，也可一并说明，如「本月生日关怀」" : undefined,
-    "也可直接说「本月」「本周」等",
-  ].filter(Boolean) as string[],
-});
+const askTimeRange = (_intent: StatsIntent, careType?: CareType | "all"): HumanityCareAgentReply =>
+  askClarify(
+    "统计时间范围",
+    "今日、本周、本月、上月、今年",
+    careType === undefined ? "也可一并说明关怀类型，如「本月生日关怀」" : undefined,
+  );
 
-const askCareType = (opts?: { allowAll?: boolean }): HumanityCareAgentReply => ({
-  summary: opts?.allowAll
-    ? "请先说明关怀类型：全部、生日、节日、天气、工作强度。"
-    : "请先说明关怀类型：生日、节日、天气、工作强度。",
-  list: [opts?.allowAll ? "回复例如「生日关怀」或「全部」" : "回复例如「生日关怀」"],
-});
+const askCareType = (opts?: { allowAll?: boolean }): HumanityCareAgentReply =>
+  askClarify(
+    "关怀类型",
+    opts?.allowAll
+      ? "全部、生日关怀、节日关怀、天气关怀、工作强度关怀"
+      : "生日关怀、节日关怀、天气关怀、工作强度关怀",
+  );
 
 const askSendStatsCareType = (): HumanityCareAgentReply => askCareType({ allowAll: false });
 
-const askStatsScope = (): HumanityCareAgentReply => ({
-  summary: "请说明统计范围：全部数据、某一关怀类型，或具体关怀方案名称。",
-  list: ["例如「全部」「生日关怀」「全员生日祝福」"],
-});
+const askStatsScope = (): HumanityCareAgentReply =>
+  askClarify("统计范围", "全部、生日关怀、全员生日祝福");
 
 const statsIntentsNeedingScope = new Set<StatsIntent>(["messages_count", "points_total"]);
 
@@ -592,24 +815,11 @@ const isDeptRankQuery = (q: string) =>
 const isPointsRankQuery = (q: string) =>
   /积分/.test(q) && /(排名|前\s*10|前十|top)/i.test(q);
 
-const askBatchToggleCareType = (enable: boolean): HumanityCareAgentReply => ({
-  summary: `请先说明要${enable ? "启用" : "停用"}哪种关怀类型：生日、节日、天气、工作强度，或全部。`,
-  list: ["回复例如「生日关怀」或「全部」"],
-});
-
-const batchToggleTargetLabel = (careType: CareType | "all") =>
-  careType === "all" ? "全部" : careTypeLabel[careType];
-
-const buildBatchToggleSuccess = (
-  enable: boolean,
-  count: number,
-  careType: CareType | "all",
-) => {
-  const verb = enable ? "已启用成功" : "已停用成功";
-  return careType === "all"
-    ? `${verb}，共 ${count} 条。`
-    : `${verb}，共 ${count} 条${careTypeLabel[careType]}。`;
-};
+const askBatchToggleCareType = (enable: boolean): HumanityCareAgentReply =>
+  askClarify(
+    `要${enable ? "启用" : "停用"}的关怀类型`,
+    "全部、生日关怀、节日关怀、天气关怀、工作强度关怀",
+  );
 
 const buildStatsReply = (
   rules: CareRule[],
@@ -656,7 +866,7 @@ const handlePickStatsScope = (
     if (!picked) {
       return {
         reply: {
-          summary: "未识别所选方案，请回复序号（如 1）或方案名称。",
+          summary: "未识别所选方案，请先明确方案名称（可回复序号或名称）。",
           table: {
             headers: ["序号", "方案名称"],
             rows: pending.candidates.map((r, i) => [String(i + 1), r.name]),
@@ -679,7 +889,7 @@ const handlePickStatsScope = (
   if (Array.isArray(parsed)) {
     return {
       reply: {
-        summary: "匹配到多个关怀方案，请选择（回复序号）：",
+        summary: "匹配到多个方案，请先明确方案名称（可回复序号或名称）。",
         table: {
           headers: ["序号", "方案名称"],
           rows: parsed.map((r, i) => [String(i + 1), r.name]),
@@ -712,7 +922,7 @@ const resolveScopedStats = (
   if (Array.isArray(parsed)) {
     return {
       reply: {
-        summary: "匹配到多个关怀方案，请选择（回复序号）：",
+        summary: "匹配到多个方案，请先明确方案名称（可回复序号或名称）。",
         table: {
           headers: ["序号", "方案名称"],
           rows: parsed.map((r, i) => [String(i + 1), r.name]),
@@ -732,7 +942,7 @@ const handlePickCareType = (
   q: string,
   pending: Extract<PendingSession, { kind: "pick_care_type" }>,
   rules: CareRule[],
-): { reply: HumanityCareAgentReply; pending: PendingSession | null; navigate?: string } => {
+): { reply: HumanityCareAgentReply; pending: PendingSession | null } => {
   const careType = parseCareType(q);
   if (!careType) {
     if (pending.intent === "batch_toggle") {
@@ -756,18 +966,24 @@ const handlePickCareType = (
   }
 
   if (pending.intent === "batch_toggle") {
-    const pool = careType === "all" ? rules : rules.filter((r) => r.type === careType);
     const enable = pending.enable ?? true;
+    const intent: ManageIntent = enable ? "enable" : "disable";
+    if (careType === "all") {
+      return {
+        reply: withNavigateActions(
+          `请前往各关怀类型列表批量${manageVerb[intent]}方案。`,
+          (Object.keys(careModules) as CareType[]).map((t) => ({
+            label: `打开${careTypeLabel[t]}列表`,
+            type: "navigate" as const,
+            payload: moduleListPath(t),
+          })),
+        ),
+        pending: null,
+      };
+    }
     return {
-      reply: {
-        summary: `将${enable ? "启用" : "停用"}${batchToggleTargetLabel(careType)}共 ${pool.length} 条规则，是否确认？回复「确认」继续，回复「取消」放弃。`,
-      },
-      pending: {
-        kind: "batch_toggle_confirm",
-        careType,
-        enable,
-        count: pool.length,
-      },
+      reply: buildManageNavigateReply(intent, careType),
+      pending: null,
     };
   }
 
@@ -859,113 +1075,35 @@ const handlePickTimeRange = (
 export const dispatchHumanityCareAgent = (
   query: string,
   pending: PendingSession | null,
-): { reply: HumanityCareAgentReply; pending: PendingSession | null; navigate?: string } => {
+): { reply: HumanityCareAgentReply; pending: PendingSession | null } => {
   const q = normalizeQuery(query.trim());
   const rules = getCareRulesSnapshot();
 
-  if (pending?.kind === "delete_confirm") {
-    if (/确认|确定|是/.test(q) && !/不|取消/.test(q)) {
-      deleteCareRule(pending.ruleId);
-      return {
-        reply: { summary: `已删除成功。「${pending.ruleName}」将不再发送，已发送消息不受影响。` },
-        pending: null,
-      };
-    }
-    if (/取消|不/.test(q)) {
-      return { reply: { summary: "已取消删除操作。" }, pending: null };
-    }
-    return {
-      reply: {
-        summary: `是否确认删除「${pending.ruleName}」？回复「确认」继续，回复「取消」放弃。`,
-        list: ["删除后将停止发送，已发送消息不受影响"],
-      },
-      pending,
-    };
+  if (pending?.kind === "pick_manage_target") {
+    return replyManageTarget(q, rules, pending.intent);
   }
 
-  if (pending?.kind === "toggle_confirm") {
-    if (/确认|确定|是/.test(q) && !/不|取消/.test(q)) {
-      setCareRuleEnabled(pending.ruleId, pending.enable);
+  if (pending?.kind === "pick_manage_rule") {
+    const idx = Number(q.replace(/\D/g, "")) - 1;
+    const nameHits = findRulesByNameHint(q, pending.candidates);
+    const picked =
+      idx >= 0 && idx < pending.candidates.length
+        ? pending.candidates[idx]
+        : nameHits.length === 1
+          ? nameHits[0]
+          : pending.candidates.find(
+              (r) => r.name.includes(q) || q.includes(r.name) || fuzzyNameMatch(r.name, q),
+            );
+    if (!picked) {
       return {
         reply: {
-          summary: pending.enable
-            ? `已启用成功。「${pending.ruleName}」已恢复发送。`
-            : `已停用成功。「${pending.ruleName}」已暂停发送。`,
+          summary: "未识别所选方案，请先明确方案名称（可回复序号或名称）。",
+          table: managePickTable(pending.intent, pending.candidates),
         },
-        pending: null,
+        pending,
       };
     }
-    if (/取消|不/.test(q)) {
-      return {
-        reply: { summary: `已取消${pending.enable ? "启用" : "停用"}操作。` },
-        pending: null,
-      };
-    }
-    return {
-      reply: {
-        summary: `是否确认${pending.enable ? "启用" : "停用"}「${pending.ruleName}」？回复「确认」继续，回复「取消」放弃。`,
-      },
-      pending,
-    };
-  }
-
-  if (pending?.kind === "batch_toggle_confirm") {
-    if (/确认|确定|是/.test(q) && !/不|取消/.test(q)) {
-      const pool =
-        pending.careType === "all"
-          ? rules
-          : rules.filter((r) => r.type === pending.careType);
-      pool.forEach((r) => setCareRuleEnabled(r.id, pending.enable));
-      return {
-        reply: {
-          summary: buildBatchToggleSuccess(
-            pending.enable,
-            pending.count,
-            pending.careType,
-          ),
-        },
-        pending: null,
-      };
-    }
-    if (/取消|不/.test(q)) {
-      return { reply: { summary: "已取消批量操作。" }, pending: null };
-    }
-    return {
-      reply: {
-        summary: `是否确认批量${pending.enable ? "启用" : "停用"}${batchToggleTargetLabel(pending.careType)}？回复「确认」继续，回复「取消」放弃。`,
-      },
-      pending,
-    };
-  }
-
-  if (pending?.kind === "modify_confirm") {
-    if (/确认|确定|是/.test(q) && !/不|取消/.test(q)) {
-      const rule = rules.find((r) => r.id === pending.ruleId);
-      if (!rule) {
-        return { reply: { summary: "规则不存在或已被删除。" }, pending: null };
-      }
-      upsertCareRule({
-        ...rule,
-        points: pending.changes.points ?? rule.points,
-        triggerTime: pending.changes.triggerTime ?? rule.triggerTime,
-      });
-      const parts: string[] = [];
-      if (pending.changes.points !== undefined) parts.push(`积分 ${pending.changes.points} 分`);
-      if (pending.changes.triggerTime) parts.push(`触达时间 ${pending.changes.triggerTime}`);
-      return {
-        reply: { summary: `已更新「${pending.ruleName}」：${parts.join("、")}。` },
-        pending: null,
-      };
-    }
-    if (/取消|不/.test(q)) {
-      return { reply: { summary: "已取消修改。" }, pending: null };
-    }
-    return {
-      reply: {
-        summary: `请确认修改「${pending.ruleName}」，回复「确认」继续，回复「取消」放弃。`,
-      },
-      pending,
-    };
+    return replyPickedManageRule(picked, pending.intent);
   }
 
   if (pending?.kind === "pick_care_type") {
@@ -980,117 +1118,19 @@ export const dispatchHumanityCareAgent = (
     return handlePickTimeRange(q, pending, rules);
   }
 
-  if (pending?.kind === "pick_rule") {
-    const idx = Number(q.replace(/\D/g, "")) - 1;
-    const picked =
-      idx >= 0 && idx < pending.candidates.length
-        ? pending.candidates[idx]
-        : pending.candidates.find((r) => r.name.includes(q) || q.includes(r.name));
-
-    if (!picked) {
-      return {
-        reply: {
-          summary: "未识别所选规则，请回复序号（如 1）或规则名称。",
-          table: {
-            headers: ["序号", "规则名称", "状态"],
-            rows: pending.candidates.map((r, i) => [
-              String(i + 1),
-              r.name,
-              r.enabled ? "已启用" : "已停用",
-            ]),
-          },
-        },
-        pending,
-      };
-    }
-
-    if (pending.intent === "detail" || pending.intent === "nav_detail") {
-      return {
-        reply: {
-          ...buildRuleDetailReply(picked),
-          actions: [{ label: "查看规则详情", type: "navigate", payload: ruleEditPath(picked) }],
-        },
-        pending: null,
-        navigate: ruleEditPath(picked),
-      };
-    }
-
-    if (pending.intent === "delete") {
-      return {
-        reply: {
-          summary: `是否确认删除「${picked.name}」？回复「确认」继续，回复「取消」放弃。`,
-          list: ["删除后将停止发送，已发送消息不受影响"],
-        },
-        pending: { kind: "delete_confirm", ruleId: picked.id, ruleName: picked.name },
-      };
-    }
-
-    if (pending.intent === "toggle") {
-      const enable = pending.enable ?? true;
-      return {
-        reply: {
-          summary: `是否确认${enable ? "启用" : "停用"}「${picked.name}」？回复「确认」继续，回复「取消」放弃。`,
-        },
-        pending: {
-          kind: "toggle_confirm",
-          ruleId: picked.id,
-          ruleName: picked.name,
-          enable,
-        },
-      };
-    }
-
-    if (pending.intent === "nav_modify") {
-      const path = moduleListPath(picked.type);
-      return {
-        reply: {
-          summary: `请在列表中选择要修改的方案，或打开「${picked.name}」进行编辑。`,
-          actions: [
-            { label: `打开${careTypeLabel[picked.type]}列表`, type: "navigate", payload: path },
-            { label: "编辑该规则", type: "navigate", payload: ruleEditPath(picked) },
-          ],
-        },
-        pending: null,
-        navigate: ruleEditPath(picked),
-      };
-    }
-
-    if (pending.intent === "modify" && pending.modifyDraft) {
-      return {
-        reply: {
-          summary: `将修改「${picked.name}」：${
-            pending.modifyDraft.points !== undefined
-              ? `积分 → ${pending.modifyDraft.points} 分`
-              : ""
-          }${
-            pending.modifyDraft.triggerTime
-              ? `触达时间 → ${pending.modifyDraft.triggerTime}`
-              : ""
-          }。回复「确认」继续，回复「取消」放弃。`,
-        },
-        pending: {
-          kind: "modify_confirm",
-          ruleId: picked.id,
-          ruleName: picked.name,
-          changes: pending.modifyDraft,
-        },
-      };
-    }
-  }
-
   // --- 新建关怀 ---
   if (/新建/.test(q) && /关怀|规则|方案/.test(q)) {
     const careType = parseCareType(q);
     if (!careType || careType === "all") {
       return {
-        reply: {
-          summary: "要新建哪种关怀？可选择：生日、节日、天气或工作强度关怀。",
-          actions: (Object.keys(careModules) as CareType[]).map((t) => ({
+        reply: withNavigateActions(
+          "请先明确要新建的关怀类型。",
+          (Object.keys(careModules) as CareType[]).map((t) => ({
             label: `新建${careTypeLabel[t]}`,
             type: "navigate" as const,
             payload: moduleNewPath(t),
           })),
-        },
+        ),
         pending: null,
       };
     }
@@ -1102,53 +1142,16 @@ export const dispatchHumanityCareAgent = (
     if (/09:00|当天/.test(q)) qs.set("trigger", "生日当天 09:00");
     const path = moduleNewPath(careType, qs);
     return {
-      reply: {
-        summary: `正在为你打开${careTypeLabel[careType]}创建页…`,
-        actions: [{ label: `新建${careTypeLabel[careType]}`, type: "navigate", payload: path }],
-      },
+      reply: withNavigateActions(
+        `已识别${careTypeLabel[careType]}，请前往创建页完成配置。`,
+        [{ label: `新建${careTypeLabel[careType]}`, type: "navigate", payload: path }],
+      ),
       pending: null,
-      navigate: path,
     };
   }
 
-  // --- 删除 ---
-  if (/删除/.test(q) && /关怀|规则|方案/.test(q)) {
-    const careType = parseCareType(q);
-    const matched = matchRules(q, rules, careType === "all" ? undefined : careType);
-    if (!matched.length) {
-      return { reply: { summary: "未找到可删除的关怀规则。" }, pending: null };
-    }
-    if (matched.length === 1) {
-      return {
-        reply: {
-          summary: `是否确认删除「${matched[0].name}」？回复「确认」继续，回复「取消」放弃。`,
-          list: ["删除后将停止发送，已发送消息不受影响"],
-        },
-        pending: {
-          kind: "delete_confirm",
-          ruleId: matched[0].id,
-          ruleName: matched[0].name,
-        },
-      };
-    }
-    return {
-      reply: {
-        summary: "找到多条规则，请选择要删除的方案（回复序号）：",
-        table: {
-          headers: ["序号", "规则名称", "状态"],
-          rows: matched.map((r, i) => [
-            String(i + 1),
-            r.name,
-            r.enabled ? "已启用" : "已停用",
-          ]),
-        },
-      },
-      pending: { kind: "pick_rule", intent: "delete", candidates: matched },
-    };
-  }
-
-  // --- 启用 / 停用 ---
-  if (/批量/.test(q) && /(启用|停用)/.test(q)) {
+  // --- 批量启用 / 停用 ---
+  if (/批量|一键|统统|全部(启用|停用)/.test(q) && /(启用|停用)/.test(q)) {
     const enable = /启用/.test(q);
     const careType = parseCareType(q);
     if (!careType) {
@@ -1157,201 +1160,26 @@ export const dispatchHumanityCareAgent = (
         pending: { kind: "pick_care_type", intent: "batch_toggle", enable },
       };
     }
-    const pool =
-      careType === "all" ? rules : rules.filter((r) => r.type === careType);
-    return {
-      reply: {
-        summary: `将${enable ? "启用" : "停用"}${batchToggleTargetLabel(careType)}共 ${pool.length} 条规则，是否确认？回复「确认」继续，回复「取消」放弃。`,
-      },
-      pending: {
-        kind: "batch_toggle_confirm",
-        careType,
-        enable,
-        count: pool.length,
-      },
-    };
-  }
-
-  if (/(启用|停用)/.test(q) && /关怀|规则|方案/.test(q)) {
-    const enable = /启用/.test(q);
-    const careType = parseCareType(q);
-    const matched = matchRules(q, rules, careType === "all" ? undefined : careType);
-    if (!matched.length) {
-      return { reply: { summary: "未找到匹配的关怀规则。" }, pending: null };
-    }
-    if (matched.length === 1) {
-      return {
-        reply: {
-          summary: `是否确认${enable ? "启用" : "停用"}「${matched[0].name}」？回复「确认」继续，回复「取消」放弃。`,
-        },
-        pending: {
-          kind: "toggle_confirm",
-          ruleId: matched[0].id,
-          ruleName: matched[0].name,
-          enable,
-        },
-      };
-    }
-    return {
-      reply: {
-        summary: `找到多条规则，请选择要${enable ? "启用" : "停用"}的方案（回复序号）：`,
-        table: {
-          headers: ["序号", "规则名称", "状态"],
-          rows: matched.map((r, i) => [
-            String(i + 1),
-            r.name,
-            r.enabled ? "已启用" : "已停用",
-          ]),
-        },
-      },
-      pending: {
-        kind: "pick_rule",
-        intent: "toggle",
-        candidates: matched,
-        enable,
-      },
-    };
-  }
-
-  // --- 修改（跳转） ---
-  if (/修改/.test(q) && /关怀|规则|方案/.test(q)) {
-    const careType = parseCareType(q);
-    const matched = matchRules(q, rules, careType === "all" ? undefined : careType);
-    const points = extractPoints(q);
-    const triggerTime = extractTriggerTime(q);
-
-    if (points || triggerTime) {
-      if (!matched.length) {
-        return { reply: { summary: "未找到匹配的关怀规则。" }, pending: null };
-      }
-      const draft = { points, triggerTime };
-      if (matched.length === 1) {
-        return {
-          reply: {
-            summary: `将修改「${matched[0].name}」，回复「确认」继续，回复「取消」放弃：`,
-            list: [
-              points !== undefined ? `积分 → ${points} 分` : "",
-              triggerTime ? `触达时间 → ${triggerTime}` : "",
-            ].filter(Boolean),
-          },
-          pending: {
-            kind: "modify_confirm",
-            ruleId: matched[0].id,
-            ruleName: matched[0].name,
-            changes: draft,
-          },
-        };
-      }
-      return {
-        reply: {
-          summary: "找到多条规则，请选择要修改的方案（回复序号）：",
-          table: {
-            headers: ["序号", "规则名称", "当前积分"],
-            rows: matched.map((r, i) => [String(i + 1), r.name, String(r.points)]),
-          },
-        },
-        pending: {
-          kind: "pick_rule",
-          intent: "modify",
-          candidates: matched,
-          modifyDraft: draft,
-        },
-      };
-    }
-
-    if (matched.length === 1) {
-      const path = ruleEditPath(matched[0]);
-      return {
-        reply: {
-          summary: `正在打开「${matched[0].name}」详情页，可在此修改配置。`,
-          actions: [{ label: "打开规则详情", type: "navigate", payload: path }],
-        },
-        pending: null,
-        navigate: path,
-      };
-    }
-
-    const type = careType && careType !== "all" ? careType : matched[0]?.type ?? "birthday";
-    const path = moduleListPath(type);
-    if (matched.length > 1) {
-      return {
-        reply: {
-          summary: "匹配到多条规则，请选择要修改的方案（回复序号），或前往列表页：",
-          table: {
-            headers: ["序号", "规则名称"],
-            rows: matched.map((r, i) => [String(i + 1), r.name]),
-          },
-          actions: [{ label: `打开${careTypeLabel[type]}列表`, type: "navigate", payload: path }],
-        },
-        pending: { kind: "pick_rule", intent: "nav_modify", candidates: matched },
-      };
-    }
-    return {
-      reply: {
-        summary: `请先在${careTypeLabel[type]}列表中选择要修改的方案。`,
-        actions: [{ label: `打开${careTypeLabel[type]}列表`, type: "navigate", payload: path }],
-      },
-      pending: null,
-      navigate: path,
-    };
-  }
-
-  // --- 查询规则详情 ---
-  if (/(查询|查看)/.test(q) && /详情/.test(q) && /关怀|规则|方案/.test(q)) {
-    const careType = parseCareType(q);
-    const matched = matchRules(q, rules, careType === "all" ? undefined : careType);
-    if (matched.length === 1) {
-      const path = ruleEditPath(matched[0]);
-      return {
-        reply: {
-          ...buildRuleDetailReply(matched[0]),
-          actions: [{ label: "打开规则详情", type: "navigate", payload: path }],
-        },
-        pending: null,
-        navigate: path,
-      };
-    }
-    if (matched.length > 1) {
-      return {
-        reply: {
-          summary: "匹配到多条规则，请选择要查看的方案（回复序号）：",
-          table: {
-            headers: ["序号", "规则名称"],
-            rows: matched.map((r, i) => [String(i + 1), r.name]),
-          },
-        },
-        pending: { kind: "pick_rule", intent: "nav_detail", candidates: matched },
-      };
-    }
-    return { reply: { summary: "请先说明要查看哪条规则，例如规则名称。" }, pending: null };
-  }
-
-  // --- 规则列表 ---
-  if (/(查询|查看)/.test(q) && /规则|方案/.test(q) && !/详情|统计|发送|积分|覆盖/.test(q)) {
-    const careType = parseCareType(q) ?? "birthday";
+    const intent: ManageIntent = enable ? "enable" : "disable";
     if (careType === "all") {
-      return { reply: buildRuleCountReply(rules), pending: null };
+      return {
+        reply: withNavigateActions(
+          `请前往各关怀类型列表批量${manageVerb[intent]}方案。`,
+          (Object.keys(careModules) as CareType[]).map((t) => ({
+            label: `打开${careTypeLabel[t]}列表`,
+            type: "navigate" as const,
+            payload: moduleListPath(t),
+          })),
+        ),
+        pending: null,
+      };
     }
-    const typed = rules.filter((r) => r.type === careType);
-    if (!typed.length) {
-      return { reply: { summary: `当前没有${careTypeLabel[careType]}规则。` }, pending: null };
-    }
-    return {
-      reply: {
-        summary: `共 ${typed.length} 条${careTypeLabel[careType]}规则：`,
-        table: {
-          headers: ["规则名称", "状态", "覆盖对象", "下次触达"],
-          rows: typed.map((r) => [
-            r.name,
-            r.enabled ? "已启用" : "已停用",
-            r.audience,
-            r.triggerTime,
-          ]),
-        },
-      },
-      pending: null,
-    };
+    return { reply: buildManageNavigateReply(intent, careType), pending: null };
   }
+
+  // --- 规则管理：删除 / 修改 / 启用 / 停用 / 查询 ---
+  const manageResult = tryDispatchManage(q, rules);
+  if (manageResult) return manageResult;
 
   // --- 规则数量 ---
   if (isRuleCountQuery(q)) {
@@ -1601,10 +1429,11 @@ export const dispatchHumanityCareAgent = (
   return {
     reply: {
       summary:
-        "我可以帮你管理关怀规则、查询统计数据。试试：\n· 帮我新建一个节日关怀\n· 停用全员生日祝福规则\n· 本月一共发送了多少条关怀消息？\n· 哪些员工还没收到生日关怀\n· 查看积分发放总量",
+        "我可以帮你管理关怀规则、查询统计数据。试试：\n· 帮我把全员生日祝福停了\n· 中秋节关怀想删了\n· 看看高温预警关怀怎么样\n· 本月一共发送了多少条关怀消息？\n· 哪些员工还没收到生日关怀",
       list: [
-        "支持多轮对话：例如先查列表，再回复序号进行删除、启用或查看详情",
-        "二次确认请回复「确认」继续，或回复「取消」放弃",
+        "规则管理支持口语表达，不必拘泥固定句式",
+        "删除、启用、停用将引导至对应关怀类型列表页操作",
+        "修改、查询明确方案名称后，可点击按钮进入方案详情页",
       ],
     },
     pending: null,

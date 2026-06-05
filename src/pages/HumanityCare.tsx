@@ -270,8 +270,7 @@ const HumanityCare = () => {
     setIsTyping(true);
 
     window.setTimeout(() => {
-      const { reply, pending: nextPending, navigate: nav } =
-        dispatchHumanityCareAgent(q, pending);
+      const { reply, pending: nextPending } = dispatchHumanityCareAgent(q, pending);
       setPending(nextPending);
       setMessages((prev) => [
         ...prev,
@@ -283,7 +282,6 @@ const HumanityCare = () => {
         },
       ]);
       setIsTyping(false);
-      if (nav) navigate(nav);
     }, 500 + Math.random() * 400);
   };
 
