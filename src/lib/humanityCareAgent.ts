@@ -524,12 +524,6 @@ const statsScopeLabel = (scope: StatsScope) => {
   return `「${scope.rule.name}」`;
 };
 
-const calcPointsForRules = (rules: CareRule[], range: TimeRangeKey) =>
-  scaleByTime(
-    rules.reduce((a, r) => a + r.points * Math.max(1, Math.round(r.reached * 0.08)), 0),
-    range,
-  );
-
 const parseStatsScope = (
   q: string,
   rules: CareRule[],
@@ -553,6 +547,29 @@ const parseStatsScope = (
   return undefined;
 };
 
+const buildRuleCountTable = (
+  rules: CareRule[],
+  careType: CareType | "all" = "all",
+): AgentTable => {
+  const types =
+    careType === "all"
+      ? (Object.keys(careTypeLabel) as CareType[])
+      : [careType];
+  return {
+    headers: ["关怀类型", "总数", "启用中", "已停用"],
+    rows: types.map((t) => {
+      const typed = rules.filter((r) => r.type === t);
+      const enabled = typed.filter((r) => r.enabled).length;
+      return [
+        careTypeLabel[t],
+        String(typed.length),
+        String(enabled),
+        String(typed.length - enabled),
+      ];
+    }),
+  };
+};
+
 const buildRuleCountReply = (
   rules: CareRule[],
   careType: CareType | "all" = "all",
@@ -563,26 +580,31 @@ const buildRuleCountReply = (
   const disabled = pool.length - enabled;
   const summary =
     careType === "all"
-      ? `目前已有 ${pool.length} 个关怀方案，启用 ${enabled} 个，停用 ${disabled} 个。`
-      : `目前共有 ${pool.length} 个${careTypeLabel[careType]}方案，启用 ${enabled} 个，停用 ${disabled} 个。`;
+      ? `目前已有 ${pool.length} 个关怀方案，启用 ${enabled} 个，停用 ${disabled} 个，明细如下：`
+      : `目前共有 ${pool.length} 个${careTypeLabel[careType]}方案，启用 ${enabled} 个，停用 ${disabled} 个，明细如下：`;
   return {
     summary,
-    table:
-      careType === "all"
-        ? {
-            headers: ["关怀类型", "总数", "启用中", "已停用"],
-            rows: (Object.keys(careTypeLabel) as CareType[]).map((t) => {
-              const typed = rules.filter((r) => r.type === t);
-              const en = typed.filter((r) => r.enabled).length;
-              return [
-                careTypeLabel[t],
-                String(typed.length),
-                String(en),
-                String(typed.length - en),
-              ];
-            }),
-          }
-        : undefined,
+    table: buildRuleCountTable(rules, careType),
+  };
+};
+
+const buildSchemeStatsTable = (pool: CareRule[], range: TimeRangeKey): AgentTable => {
+  let totalPoints = 0;
+  let totalReached = 0;
+  const rows = pool.map((r) => {
+    const points = scaleByTime(
+      r.points * Math.max(1, Math.round(r.reached * 0.08)),
+      range,
+    );
+    const reached = scaleByTime(r.reached, range);
+    totalPoints += points;
+    totalReached += reached;
+    return [careTypeLabel[r.type], r.name, String(points), String(reached)];
+  });
+  rows.push(["合计", "—", String(totalPoints), String(totalReached)]);
+  return {
+    headers: ["关怀类型", "方案名称", "累计发放积分", "触达人次"],
+    rows,
   };
 };
 
@@ -595,14 +617,7 @@ const buildSendStatsReply = (
   const label = careType === "all" ? "全部关怀" : careTypeLabel[careType];
   return {
     summary: `${timeRangeLabel[range]}${label}发送统计如下：`,
-    table: {
-      headers: ["方案名称", "累计发放积分", "触达人次"],
-      rows: filtered.map((r) => [
-        r.name,
-        String(scaleByTime(r.points * Math.max(1, Math.round(r.reached * 0.08)), range)),
-        String(scaleByTime(r.reached, range)),
-      ]),
-    },
+    table: buildSchemeStatsTable(filtered, range),
   };
 };
 
@@ -612,15 +627,17 @@ const buildMessagesCountReply = (
   scope: StatsScope,
 ): HumanityCareAgentReply => {
   const pool = resolveRulesByScope(rules, scope);
-  const total = pool.reduce((a, r) => a + scaleByTime(r.reached, range), 0);
   const label = statsScopeLabel(scope);
+  const table = buildSchemeStatsTable(pool, range);
+  const totalRow = table.rows[table.rows.length - 1];
+  const total = totalRow[3];
   const summary =
     scope.kind === "all"
       ? range === "month"
-        ? `${timeRangeLabel[range]}一共发送 ${total.toLocaleString()} 条消息。`
-        : `${timeRangeLabel[range]}共发送 ${total.toLocaleString()} 条消息。`
-      : `${timeRangeLabel[range]}${label}共发送 ${total.toLocaleString()} 条消息。`;
-  return { summary };
+        ? `${timeRangeLabel[range]}一共发送 ${total} 条消息，明细如下：`
+        : `${timeRangeLabel[range]}共发送 ${total} 条消息，明细如下：`
+      : `${timeRangeLabel[range]}${label}共发送 ${total} 条消息，明细如下：`;
+  return { summary, table };
 };
 
 const buildPointsTotalReply = (
@@ -629,13 +646,15 @@ const buildPointsTotalReply = (
   scope: StatsScope,
 ): HumanityCareAgentReply => {
   const pool = resolveRulesByScope(rules, scope);
-  const total = calcPointsForRules(pool, range);
   const label = statsScopeLabel(scope);
+  const table = buildSchemeStatsTable(pool, range);
+  const totalRow = table.rows[table.rows.length - 1];
+  const total = totalRow[2];
   const summary =
     scope.kind === "all"
-      ? `一共发放了 ${total.toLocaleString()} 个积分。`
-      : `${label}一共发放了 ${total.toLocaleString()} 个积分。`;
-  return { summary };
+      ? `${timeRangeLabel[range]}一共发放 ${total} 积分，明细如下：`
+      : `${timeRangeLabel[range]}${label}一共发放 ${total} 积分，明细如下：`;
+  return { summary, table };
 };
 
 const buildPointsAvgReply = (
@@ -785,14 +804,30 @@ const isSendStatsQuery = (q: string) =>
     /关怀/.test(q) &&
     !/一共|几条|多少条|消息总数|共发送/.test(q));
 
+const isPeriodMessagesTotalQuery = (q: string) =>
+  /(今日|本周|本月)\s*发送\s*消息\s*总数/.test(q);
+
 const isMessagesCountQuery = (q: string) =>
-  /(一共发送|发送了多少|多少条.*消息|消息总数|共发送)/.test(q) &&
-  /(关怀|消息)/.test(q);
+  isPeriodMessagesTotalQuery(q) ||
+  /发送\s*消息\s*总数/.test(q) ||
+  (/(一共发送|发送了多少|多少条.*消息|消息总数|共发送)/.test(q) &&
+    /(关怀|消息)/.test(q));
+
+const shouldDefaultMessagesScopeAll = (q: string, rules: CareRule[]) => {
+  if (isPeriodMessagesTotalQuery(q)) return true;
+  const compact = q.replace(/[？?。.!！\s]/g, "");
+  return (
+    !!parseTimeRange(compact) &&
+    parseStatsScope(compact, rules) === undefined &&
+    /^(今日|本周|本月|上月|今年|今天|这周|这个月)$/.test(compact)
+  );
+};
 
 const isRuleCountQuery = (q: string) =>
   /(多少|几个|数量|总数)/.test(q) &&
   /(关怀|方案|规则)/.test(q) &&
-  /(启用|停用|方案|规则)/.test(q);
+  /(启用|停用|方案|规则|几个|多少|数量|总数)/.test(q) &&
+  !/(发送|消息|积分|覆盖|占比|排名|触达)/.test(q);
 
 const isPointsTotalQuery = (q: string) =>
   /积分/.test(q) && /(总量|一共|总共|合计|发放总量)/.test(q) && !/人均|排名/.test(q);
@@ -912,12 +947,16 @@ const resolveScopedStats = (
 ):
   | { reply: HumanityCareAgentReply; pending: PendingSession | null }
   | { reply: HumanityCareAgentReply; pending: null; scope: StatsScope } => {
-  const parsed = parseStatsScope(q, rules);
+  let parsed = parseStatsScope(q, rules);
   if (parsed === undefined) {
-    return {
-      reply: askStatsScope(),
-      pending: { kind: "pick_stats_scope", intent, timeRange: range },
-    };
+    if (intent === "messages_count" && shouldDefaultMessagesScopeAll(q, rules)) {
+      parsed = { kind: "all" };
+    } else {
+      return {
+        reply: askStatsScope(),
+        pending: { kind: "pick_stats_scope", intent, timeRange: range },
+      };
+    }
   }
   if (Array.isArray(parsed)) {
     return {

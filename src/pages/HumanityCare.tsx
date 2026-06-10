@@ -56,6 +56,21 @@ const promptGroups: { title: string; prompts: Prompt[] }[] = [
         action: "chat" as const,
       },
       {
+        text: "今日发送消息总数",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
+        text: "本周发送消息总数",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
+        text: "本月发送消息总数",
+        type: "birthday" as CareType,
+        action: "chat" as const,
+      },
+      {
         text: "查看积分发放总量",
         type: "birthday" as CareType,
         action: "chat" as const,
