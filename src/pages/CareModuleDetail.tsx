@@ -363,7 +363,19 @@ const RuleCard = ({
         className="mt-3 flex items-center justify-between border-t border-border/60 pt-2.5"
         onClick={(e) => e.stopPropagation()}
       >
-        {enabled && rule.reached > 0 ? (
+        {moduleType === "weather" ? (
+          enabled ? (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-medium"
+              style={{ color: `hsl(var(${mod.colorVar}))` }}
+            >
+              <Sparkles className="h-3 w-3" />
+              每日触发
+            </span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground/60">已停用</span>
+          )
+        ) : enabled && rule.reached > 0 ? (
           <span
             className="inline-flex items-center gap-1 text-[11px] font-medium"
             style={{ color: `hsl(var(${mod.colorVar}))` }}

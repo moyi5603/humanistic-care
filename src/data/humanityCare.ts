@@ -810,7 +810,7 @@ export const summarizeWeather = (
   const enabledCount = parts.length;
   return {
     text: parts.slice(0, 2).join(" · ") + (parts.length > 2 ? ` 等 ${enabledCount} 项` : ""),
-    sub: `共启用 ${enabledCount} 项天气触发 · 满足即触达`,
+    sub: "每日触发",
   };
 };
 
