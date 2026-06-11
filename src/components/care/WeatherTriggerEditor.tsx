@@ -197,7 +197,7 @@ const ColdWaveBody = ({
 }) => (
   <div className="space-y-4">
     <ThresholdParamBlock
-      title="① 24 小时降温幅度"
+      title="① 24小时降温"
       param={cat.drop}
       value={drop}
       onChange={onDropChange}

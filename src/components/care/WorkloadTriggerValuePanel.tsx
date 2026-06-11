@@ -68,7 +68,7 @@ export const WorkloadTriggerValuePanel = ({
                     selected ? "opacity-80" : "text-muted-foreground"
                   }`}
                 >
-                  {cat.unit === "小时" ? "h" : cat.unit}
+                  {cat.unit}
                 </span>
               )}
             </button>

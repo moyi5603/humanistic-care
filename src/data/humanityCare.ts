@@ -71,8 +71,8 @@ export const careModules: Record<CareType, CareModule> = {
     colorVar: "--cat-2",
     triggers: [
       "连续加班 ≥ 3 天",
-      "单日工时 ≥ 12h",
-      "周工时 ≥ 60h",
+      "单日工时 ≥ 12小时",
+      "周工时 ≥ 60小时",
       "凌晨 0 点后仍在线",
     ],
     templates: ["✨ AI 动态生成"],
@@ -403,7 +403,7 @@ export type WorkloadTriggerCategory = {
   min?: number;
   max?: number;
   formatValue: (v: number | string) => string; // 例如 "≥ 12 小时"
-  shortLabel: (v: number | string) => string; // 摘要里短标签 "单日 ≥ 12h"
+  shortLabel: (v: number | string) => string; // 摘要里短标签 "单日 ≥ 12小时"
 };
 
 export const workloadTriggerCategories: WorkloadTriggerCategory[] = [
@@ -421,7 +421,7 @@ export const workloadTriggerCategories: WorkloadTriggerCategory[] = [
     min: 6,
     max: 24,
     formatValue: (v) => `≥ ${v} 小时`,
-    shortLabel: (v) => `单日 ≥ ${v}h`,
+    shortLabel: (v) => `单日 ≥ ${v}小时`,
   },
   {
     key: "clockOut",
@@ -431,7 +431,7 @@ export const workloadTriggerCategories: WorkloadTriggerCategory[] = [
     icon: Moon,
     unit: "时刻",
     inputType: "time",
-    presets: ["21:00", "22:00", "23:00", "次日 00:00", "次日 02:00"],
+    presets: ["20:00", "21:00", "22:00", "23:00", "24:00"],
     defaultValue: "23:00",
     defaultEnabled: false,
     formatValue: (v) => `≥ ${v}`,
@@ -451,7 +451,7 @@ export const workloadTriggerCategories: WorkloadTriggerCategory[] = [
     min: 30,
     max: 100,
     formatValue: (v) => `≥ ${v} 小时 / 周`,
-    shortLabel: (v) => `周 ≥ ${v}h`,
+    shortLabel: (v) => `周 ≥ ${v}小时`,
   },
   {
     key: "overtimeDays",
@@ -647,7 +647,7 @@ export const weatherTriggerCategories: WeatherTriggerCategory[] = [
     icon: Snowflake,
     colorVar: "--cat-3",
     drop: {
-      label: "24 小时降温幅度",
+      label: "24小时降温",
       presets: [6, 8, 10, 12],
       defaultValue: 8,
       min: 4,
@@ -660,8 +660,8 @@ export const weatherTriggerCategories: WeatherTriggerCategory[] = [
       min: -10,
       max: 10,
     },
-    formatValue: (drop, minTemp) => `24h降温≥${drop}℃且最低温≤${minTemp}℃`,
-    shortLabel: (drop, minTemp) => `24h降温≥${drop}℃且最低温≤${minTemp}℃`,
+    formatValue: (drop, minTemp) => `24小时降温≥${drop}℃且最低气温≤${minTemp}℃`,
+    shortLabel: (drop, minTemp) => `24小时降温≥${drop}℃且最低气温≤${minTemp}℃`,
   },
   {
     key: "rainstorm",
