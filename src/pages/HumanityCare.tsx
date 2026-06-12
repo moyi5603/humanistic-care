@@ -50,152 +50,41 @@ const promptGroups: { title: string; prompts: Prompt[] }[] = [
   {
     title: "📊 整体统计",
     prompts: [
-      {
-        text: "本月一共发送了多少条关怀消息？",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "今日发送消息总数",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "本周发送消息总数",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "本月发送消息总数",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "查看积分发放总量",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "哪个部门收到的生日关怀最多？",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "积分发放排名前 10 的员工是谁？",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "哪些员工还没收到生日关怀",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-      {
-        text: "各关怀类型占比是多少？",
-        type: "birthday" as CareType,
-        action: "chat" as const,
-      },
-    ],
-  },
-  {
-    title: "⚙️ 规则管理",
-    prompts: [
-      {
-        text: "目前已有多少个关怀方案，启用和停用各几个？",
-        type: "birthday",
-        action: "chat",
-      },
-      {
-        text: "停用全员生日祝福规则",
-        type: "birthday",
-        action: "chat",
-      },
-      {
-        text: "查询全员生日祝福规则详情",
-        type: "birthday",
-        action: "chat",
-      },
-      {
-        text: "批量启用生日关怀规则",
-        type: "birthday",
-        action: "chat",
-      },
+      { text: "本月发送消息总数", type: "birthday", action: "chat" },
+      { text: "查看本月积分发放总量", type: "birthday", action: "chat" },
+      { text: "本月各关怀类型触达占比", type: "birthday", action: "chat" },
     ],
   },
   {
     title: "🎂 生日关怀",
     prompts: [
-      {
-        text: "帮我新建一个生日关怀规则",
-        type: "birthday",
-        action: "chat",
-      },
-      { text: "查看本月生日关怀的触达情况", type: "birthday", action: "chat" },
-      {
-        text: "查询所有生日关怀规则",
-        type: "birthday",
-        action: "chat",
-      },
-      {
-        text: "把所有生日关怀规则的积分改为 50 分",
-        type: "birthday",
-        action: "chat",
-      },
-      {
-        text: "把生日祝福改成 AI 动态生成",
-        type: "birthday",
-        action: "new",
-        query: { template: "✨ AI 动态生成" },
-      },
+      { text: "帮我新建一个生日关怀", type: "birthday", action: "chat" },
+      { text: "修改生日关怀", type: "birthday", action: "chat" },
+      { text: "统计上月生日关怀发送消息总数", type: "birthday", action: "chat" },
     ],
   },
   {
     title: "🎉 节日关怀",
     prompts: [
-      {
-        text: "中秋节给全员发节日礼包 + 100 积分",
-        type: "festival",
-        action: "new",
-        query: { festival: "中秋节", audience: "全公司员工", points: "100" },
-      },
-      { text: "查看春节关怀的统计报表", type: "festival", action: "detail" },
-      {
-        text: "新增端午节关怀方案",
-        type: "festival",
-        action: "new",
-        query: { festival: "端午节" },
-      },
+      { text: "帮我新建一个节日关怀", type: "festival", action: "chat" },
+      { text: "修改节日关怀", type: "festival", action: "chat" },
+      { text: "统计节日关怀发送消息总数", type: "festival", action: "chat" },
     ],
   },
   {
     title: "☔ 天气关怀",
     prompts: [
-      {
-        text: "为户外岗位创建高温预警关怀",
-        type: "weather",
-        action: "new",
-        query: { audience: "户外岗位", trigger: "高温 ≥ 35℃" },
-      },
-      { text: "查看本周天气关怀触达明细", type: "weather", action: "detail" },
-      {
-        text: "把暴雨预警阈值调整为橙色及以上",
-        type: "weather",
-        action: "new",
-        query: { trigger: "暴雨 / 雷暴" },
-      },
+      { text: "帮我新建一个天气关怀", type: "weather", action: "chat" },
+      { text: "修改天气关怀", type: "weather", action: "chat" },
+      { text: "统计上月天气关怀发送消息总数", type: "weather", action: "chat" },
     ],
   },
   {
     title: "💪 工作强度关怀",
     prompts: [
-      {
-        text: "为研发中心设置深夜加班慰问 + 打车券",
-        type: "workload",
-        action: "new",
-        query: { audience: "研发中心", trigger: "凌晨 0 点后仍在线", points: "30" },
-      },
-      { text: "查询连续加班 ≥ 3 天的员工名单", type: "workload", action: "detail" },
-      { text: "统计上月工作强度关怀的触达人次", type: "workload", action: "detail" },
+      { text: "帮我新建一个工作强度关怀", type: "workload", action: "chat" },
+      { text: "修改工作强度关怀", type: "workload", action: "chat" },
+      { text: "统计上月工作强度关怀发送消息总数", type: "workload", action: "chat" },
     ],
   },
 ];
