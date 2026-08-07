@@ -9,6 +9,8 @@ import {
   Bell,
   ChevronRight,
   RefreshCw,
+  HeartPulse,
+  HeartHandshake,
 } from "lucide-react";
 import { useMemo, useState, useRef, useEffect } from "react";
 import {
@@ -95,7 +97,33 @@ const overviewBase = {
   points: 32510,
 };
 
-const HumanityCare = () => {
+/** 跳转至系统内其他已有页面 */
+const externalCareEntries = [
+  {
+    key: "health-care",
+    name: "健康关怀",
+    desc: "体检提醒、健康福利与身心关怀服务",
+    icon: HeartPulse,
+    colorVar: "--cat-3",
+    to: "/agents",
+    state: { agentCategory: "care" as const },
+  },
+  {
+    key: "employee-care",
+    name: "员工关怀",
+    desc: "特殊人群、困难帮扶与定向关怀",
+    icon: HeartHandshake,
+    colorVar: "--cat-4",
+    to: "/colleagues",
+  },
+] as const;
+
+type HumanityCarePageProps = {
+  /** 核心能力网格列数：3 = 首页纵向紧凑；2 = 横向卡片 */
+  capabilityCols?: 2 | 3;
+};
+
+export const HumanityCarePage = ({ capabilityCols = 3 }: HumanityCarePageProps) => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [promptIdx, setPromptIdx] = useState(0);
@@ -284,27 +312,63 @@ const HumanityCare = () => {
               <h3 className="text-sm font-semibold text-foreground">核心能力</h3>
               <span className="text-[11px] text-muted-foreground">点击进入设置 / 查询 / 统计</span>
             </div>
-            <ul className="grid grid-cols-2 gap-2.5">
+            <ul
+              className={
+                capabilityCols === 2
+                  ? "grid grid-cols-2 gap-2.5"
+                  : "grid grid-cols-3 gap-2"
+              }
+            >
               {careModuleList.map((m) => {
                 const Icon = m.icon;
                 return (
                   <li key={m.key}>
                     <button
+                      type="button"
                       onClick={() => goModule(m.key)}
-                      className="group flex h-full w-full items-center gap-2.5 rounded-2xl bg-card p-2.5 text-left shadow-soft transition-base active:scale-[0.98] active:shadow-glow"
+                      className={
+                        capabilityCols === 2
+                          ? "group flex h-full w-full items-center gap-2.5 rounded-2xl bg-card p-2.5 text-left shadow-soft transition-base active:scale-[0.98] active:shadow-glow"
+                          : "group flex h-full w-full flex-col items-center gap-1.5 rounded-2xl bg-card p-2 text-center shadow-soft transition-base active:scale-[0.98] active:shadow-glow"
+                      }
                     >
                       <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                        className={
+                          capabilityCols === 2
+                            ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                            : "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                        }
                         style={{
                           background: `linear-gradient(135deg, hsl(var(${m.colorVar}) / 0.22), hsl(var(${m.colorVar}) / 0.08))`,
                           color: `hsl(var(${m.colorVar}))`,
                         }}
                       >
-                        <Icon className="h-5 w-5" strokeWidth={2.2} />
+                        <Icon
+                          className={capabilityCols === 2 ? "h-5 w-5" : "h-4 w-4"}
+                          strokeWidth={2.2}
+                        />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-foreground">{m.name}</div>
-                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                      <div
+                        className={
+                          capabilityCols === 2 ? "min-w-0 flex-1" : "min-w-0 w-full"
+                        }
+                      >
+                        <div
+                          className={
+                            capabilityCols === 2
+                              ? "text-sm font-semibold text-foreground"
+                              : "text-[11px] font-semibold leading-tight text-foreground"
+                          }
+                        >
+                          {m.name}
+                        </div>
+                        <p
+                          className={
+                            capabilityCols === 2
+                              ? "mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground"
+                              : "mt-0.5 line-clamp-2 text-[9px] leading-snug text-muted-foreground"
+                          }
+                        >
                           {m.desc}
                         </p>
                       </div>
@@ -312,21 +376,68 @@ const HumanityCare = () => {
                   </li>
                 );
               })}
-              {/* 占位 - 员工生命周期 */}
-              <li className="col-span-2">
-                <div className="flex items-center justify-between rounded-2xl border border-dashed border-border bg-card/60 p-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-foreground">员工生命周期关怀</div>
-                      <div className="text-[11px] text-muted-foreground">入职 / 转正 / 周年 等节点 · 即将上线</div>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">敬请期待</span>
-                </div>
-              </li>
+              {externalCareEntries.map((entry) => {
+                const Icon = entry.icon;
+                return (
+                  <li key={entry.key}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(
+                          entry.to,
+                          entry.state ? { state: entry.state } : undefined,
+                        )
+                      }
+                      className={
+                        capabilityCols === 2
+                          ? "group flex h-full w-full items-center gap-2.5 rounded-2xl bg-card p-2.5 text-left shadow-soft transition-base active:scale-[0.98] active:shadow-glow"
+                          : "group flex h-full w-full flex-col items-center gap-1.5 rounded-2xl bg-card p-2 text-center shadow-soft transition-base active:scale-[0.98] active:shadow-glow"
+                      }
+                    >
+                      <div
+                        className={
+                          capabilityCols === 2
+                            ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                            : "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                        }
+                        style={{
+                          background: `linear-gradient(135deg, hsl(var(${entry.colorVar}) / 0.22), hsl(var(${entry.colorVar}) / 0.08))`,
+                          color: `hsl(var(${entry.colorVar}))`,
+                        }}
+                      >
+                        <Icon
+                          className={capabilityCols === 2 ? "h-5 w-5" : "h-4 w-4"}
+                          strokeWidth={2.2}
+                        />
+                      </div>
+                      <div
+                        className={
+                          capabilityCols === 2 ? "min-w-0 flex-1" : "min-w-0 w-full"
+                        }
+                      >
+                        <div
+                          className={
+                            capabilityCols === 2
+                              ? "text-sm font-semibold text-foreground"
+                              : "text-[11px] font-semibold leading-tight text-foreground"
+                          }
+                        >
+                          {entry.name}
+                        </div>
+                        <p
+                          className={
+                            capabilityCols === 2
+                              ? "mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground"
+                              : "mt-0.5 line-clamp-2 text-[9px] leading-snug text-muted-foreground"
+                          }
+                        >
+                          {entry.desc}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </section>
 
@@ -390,5 +501,7 @@ const HumanityCare = () => {
     </>
   );
 };
+
+const HumanityCare = () => <HumanityCarePage capabilityCols={3} />;
 
 export default HumanityCare;

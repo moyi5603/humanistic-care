@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   CheckCircle2,
   Edit3,
   Users,
@@ -14,6 +15,7 @@ import {
   CalendarDays,
   Eye,
   X,
+  Trash2,
 } from "lucide-react";
 import {
   AudiencePicker,
@@ -61,6 +63,17 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { MobileDateField } from "@/components/ui/mobile-date-field";
 import { CareReceiveSimulator } from "@/components/care/CareReceiveSimulator";
 
 // 不同关怀类型的积分名称(慰问 vs 奖励)
@@ -79,7 +92,15 @@ const triggerLabels: Record<CareType, string> = {
 };
 
 // 节日列表 (按一年内时间顺序排列, 分中国 / 西方两组)
-type FestivalOpt = { name: string; date: string; group: "cn" | "west" };
+type FestivalGroup = "cn" | "west" | "custom";
+type FestivalRepeat = "yearly" | "once";
+type FestivalOpt = {
+  name: string;
+  date: string;
+  group: FestivalGroup;
+  /** 自定义节日：每年重复 / 仅一次 */
+  repeat?: FestivalRepeat;
+};
 const festivalOptions: FestivalOpt[] = [
   { name: "元旦", date: "1/1", group: "cn" },
   { name: "春节", date: "农历正月初一", group: "cn" },
@@ -108,10 +129,68 @@ const festivalOptions: FestivalOpt[] = [
 const festivalNames = festivalOptions.map((f) => f.name);
 const cnFestivalNames = festivalOptions.filter((f) => f.group === "cn").map((f) => f.name);
 const westFestivalNames = festivalOptions.filter((f) => f.group === "west").map((f) => f.name);
-const getFestivalDate = (name: string) =>
-  festivalOptions.find((f) => f.name === name)?.date ?? "";
-const getFestivalGroup = (name: string) =>
-  festivalOptions.find((f) => f.name === name)?.group ?? "cn";
+
+const CUSTOM_FESTIVAL_KEY = "humanity-care-custom-festivals";
+
+const toIsoDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const formatCustomFestivalDate = (f: Pick<FestivalOpt, "date" | "repeat">) =>
+  f.repeat === "once" ? `${f.date} · 仅一次` : `每年 ${f.date}`;
+
+const loadCustomFestivals = (): FestivalOpt[] => {
+  try {
+    const raw = localStorage.getItem(CUSTOM_FESTIVAL_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (item): item is { name: string; date: string; repeat?: FestivalRepeat } =>
+          !!item &&
+          typeof item === "object" &&
+          typeof (item as { name?: unknown }).name === "string" &&
+          typeof (item as { date?: unknown }).date === "string" &&
+          (item as { name: string }).name.trim().length > 0,
+      )
+      .map((item) => ({
+        name: item.name.trim(),
+        date: item.date.trim(),
+        group: "custom" as const,
+        repeat: item.repeat === "once" ? "once" : "yearly",
+      }));
+  } catch {
+    return [];
+  }
+};
+
+const saveCustomFestivals = (list: FestivalOpt[]) => {
+  localStorage.setItem(
+    CUSTOM_FESTIVAL_KEY,
+    JSON.stringify(
+      list.map(({ name, date, repeat }) => ({
+        name,
+        date,
+        repeat: repeat ?? "yearly",
+      })),
+    ),
+  );
+};
+
+const getFestivalDate = (name: string) => {
+  const preset = festivalOptions.find((f) => f.name === name);
+  if (preset) return preset.date;
+  const custom = loadCustomFestivals().find((f) => f.name === name);
+  if (custom) return formatCustomFestivalDate(custom);
+  return "";
+};
+
+const getFestivalGroup = (name: string): FestivalGroup => {
+  const preset = festivalOptions.find((f) => f.name === name);
+  if (preset) return preset.group;
+  if (loadCustomFestivals().some((f) => f.name === name)) return "custom";
+  return "cn";
+};
 
 // 节日触达时间点
 const festivalTriggerOptions = [
@@ -980,9 +1059,114 @@ const FestivalPicker = ({
   onChange: (v: string) => void;
   trigger: React.ReactNode;
 }) => {
-  const [tab, setTab] = useState<"cn" | "west">(getFestivalGroup(value));
+  const now = new Date();
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<FestivalGroup>(getFestivalGroup(value));
+  const [customList, setCustomList] = useState<FestivalOpt[]>(() =>
+    loadCustomFestivals(),
+  );
+  const [draftName, setDraftName] = useState("");
+  const [draftRepeat, setDraftRepeat] = useState<FestivalRepeat>("yearly");
+  const [draftIso, setDraftIso] = useState("");
+  const [draftMd, setDraftMd] = useState("");
+  const [addFormOpen, setAddFormOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<FestivalOpt | null>(null);
+  const [pending, setPending] = useState(value);
+
+  const dateMin = toIsoDate(now);
+  const dateMax = `${now.getFullYear() + 5}-12-31`;
+
+  const confirmPick = () => {
+    if (!pending) {
+      toast.error("请先选择节日");
+      return;
+    }
+    onChange(pending);
+    setOpen(false);
+  };
+
+  const confirmDeleteCustom = () => {
+    if (!deleteTarget) return;
+    const updated = customList.filter((f) => f.name !== deleteTarget.name);
+    setCustomList(updated);
+    saveCustomFestivals(updated);
+    if (pending === deleteTarget.name) {
+      setPending(festivalNames[0] ?? "");
+    }
+    if (value === deleteTarget.name) {
+      onChange(festivalNames[0] ?? "");
+    }
+    toast.success(`已删除「${deleteTarget.name}」`);
+    setDeleteTarget(null);
+  };
+
+  const handleAddCustom = () => {
+    const name = draftName.trim();
+    if (!name) {
+      toast.error("请填写节日名称");
+      return;
+    }
+    if (festivalNames.includes(name) || customList.some((f) => f.name === name)) {
+      toast.error("该节日名称已存在");
+      return;
+    }
+    let date = "";
+    if (draftRepeat === "once") {
+      if (!draftIso) {
+        toast.error("请选择日期");
+        return;
+      }
+      const [y, m, d] = draftIso.split("-").map(Number);
+      if (!y || !m || !d) {
+        toast.error("请选择日期");
+        return;
+      }
+      date = `${y}/${m}/${d}`;
+    } else {
+      if (!draftMd) {
+        toast.error("请选择日期");
+        return;
+      }
+      const [m, d] = draftMd.split("-").map(Number);
+      if (!m || !d) {
+        toast.error("请选择日期");
+        return;
+      }
+      date = `${m}/${d}`;
+    }
+    const next: FestivalOpt = {
+      name,
+      date,
+      group: "custom",
+      repeat: draftRepeat,
+    };
+    const updated = [...customList, next];
+    setCustomList(updated);
+    saveCustomFestivals(updated);
+    setDraftName("");
+    setDraftIso("");
+    setDraftMd("");
+    setPending(name);
+    setAddFormOpen(false);
+    toast.success(`已添加「${name}」`);
+  };
+
   return (
-    <Sheet onOpenChange={(o) => o && setTab(getFestivalGroup(value))}>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) {
+          setPending(value);
+          setTab(getFestivalGroup(value));
+          setCustomList(loadCustomFestivals());
+          setAddFormOpen(false);
+          setDraftIso("");
+          setDraftMd("");
+          setDraftName("");
+        }
+      }}
+    >
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent side="bottom" className="rounded-t-3xl">
         <SheetHeader>
@@ -990,45 +1174,190 @@ const FestivalPicker = ({
         </SheetHeader>
         <Tabs
           value={tab}
-          onValueChange={(v) => setTab(v as "cn" | "west")}
+          onValueChange={(v) => setTab(v as FestivalGroup)}
           className="mt-3"
         >
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="cn">中国节日</TabsTrigger>
             <TabsTrigger value="west">西方节日</TabsTrigger>
+            <TabsTrigger value="custom">自定义节日</TabsTrigger>
           </TabsList>
           {(["cn", "west"] as const).map((g) => (
             <TabsContent key={g} value={g} className="mt-3">
-              <ul className="grid max-h-[55vh] grid-cols-2 gap-1.5 overflow-y-auto scrollbar-hide">
+              <ul className="grid max-h-[45vh] grid-cols-2 gap-1.5 overflow-y-auto scrollbar-hide">
                 {(g === "cn" ? cnFestivalNames : westFestivalNames).map((opt) => (
                   <li key={opt}>
-                    <SheetTrigger asChild>
-                      <button
-                        onClick={() => onChange(opt)}
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-base ${
-                          value === opt
-                            ? "bg-accent text-accent-foreground"
-                            : "text-foreground active:bg-secondary"
-                        }`}
-                      >
-                        <span className="flex min-w-0 flex-col">
-                          <span className="truncate">{opt}</span>
-                          <span className="truncate text-[11px] text-muted-foreground">
-                            {getFestivalDate(opt)}
-                          </span>
+                    <button
+                      type="button"
+                      onClick={() => setPending(opt)}
+                      className={`flex w-full rounded-xl px-3 py-2.5 text-left text-sm transition-base ${
+                        pending === opt
+                          ? "bg-accent text-accent-foreground"
+                          : "text-foreground active:bg-secondary"
+                      }`}
+                    >
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">{opt}</span>
+                        <span className="truncate text-[11px] text-muted-foreground">
+                          {getFestivalDate(opt)}
                         </span>
-                        {value === opt && (
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                        )}
-                      </button>
-                    </SheetTrigger>
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
             </TabsContent>
           ))}
+          <TabsContent value="custom" className="mt-3 space-y-3">
+            {customList.length > 0 ? (
+              <ul className="grid max-h-[32vh] grid-cols-2 gap-1.5 overflow-y-auto scrollbar-hide">
+                {customList.map((opt) => (
+                  <li key={opt.name}>
+                    <div
+                      className={`flex w-full items-center rounded-xl px-3 py-2.5 text-sm transition-base ${
+                        pending === opt.name
+                          ? "bg-accent text-accent-foreground"
+                          : "text-foreground active:bg-secondary"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setPending(opt.name)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">{opt.name}</span>
+                          <span className="truncate text-[11px] text-muted-foreground">
+                            {formatCustomFestivalDate(opt)}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`删除${opt.name}`}
+                        onClick={() => setDeleteTarget(opt)}
+                        className="-mr-1 ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-destructive/80 transition-base active:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-xl bg-secondary/50 px-3 py-4 text-center text-[12px] text-muted-foreground">
+                暂无自定义节日，可在下方添加
+              </p>
+            )}
+
+            <div className="rounded-2xl border border-border/70 bg-card">
+              <button
+                type="button"
+                onClick={() => setAddFormOpen((o) => !o)}
+                className="flex w-full items-center justify-between px-3 py-3 text-left transition-base active:bg-secondary/40"
+                aria-expanded={addFormOpen}
+              >
+                <span className="text-[12px] font-medium text-foreground">
+                  添加自定义节日
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                    addFormOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {addFormOpen && (
+                <div className="space-y-2.5 border-t border-border/60 px-3 pb-3 pt-2.5">
+                  <input
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    placeholder="节日名称，如「公司周年庆」"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-secondary/60 p-1">
+                    {(
+                      [
+                        { key: "yearly", label: "每年重复" },
+                        { key: "once", label: "仅一次" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setDraftRepeat(opt.key)}
+                        className={`rounded-lg py-2 text-[12px] font-medium transition-base ${
+                          draftRepeat === opt.key
+                            ? "bg-card text-foreground shadow-soft"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {draftRepeat === "once" ? (
+                    <MobileDateField
+                      label="节日日期"
+                      mode="date"
+                      value={draftIso}
+                      onChange={setDraftIso}
+                      min={dateMin}
+                      max={dateMax}
+                    />
+                  ) : (
+                    <MobileDateField
+                      label="每年日期"
+                      mode="month-day"
+                      value={draftMd}
+                      onChange={setDraftMd}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddCustom}
+                    className="flex w-full items-center justify-center rounded-xl bg-secondary py-2.5 text-sm font-medium text-foreground transition-base active:scale-[0.99]"
+                  >
+                    添加
+                  </button>
+                </div>
+              )}
+            </div>
+          </TabsContent>
         </Tabs>
+
+        <div className="mt-4 border-t border-border/60 pt-3 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            onClick={confirmPick}
+            className="flex w-full items-center justify-center rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground shadow-soft transition-base active:scale-[0.99]"
+          >
+            确认
+          </button>
+        </div>
       </SheetContent>
+
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除「{deleteTarget?.name}」？</AlertDialogTitle>
+            <AlertDialogDescription>
+              删除后将从自定义节日列表移除，此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteCustom}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 };

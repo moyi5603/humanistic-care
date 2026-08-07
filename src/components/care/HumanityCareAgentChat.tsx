@@ -5,6 +5,8 @@ import type {
   AgentTable,
   HumanityCareAgentReply,
 } from "@/lib/humanityCareAgent";
+import { CareRuleCard } from "@/components/care/CareRuleCard";
+import { getCareRule, useCareRules } from "@/data/careRulesStore";
 import { cn } from "@/lib/utils";
 
 const PIE_COLORS = [
@@ -84,6 +86,22 @@ const AgentTableView = ({ table }: { table: AgentTable }) => (
   </div>
 );
 
+const AgentRuleCardView = ({ ruleId }: { ruleId: string }) => {
+  useCareRules();
+  const rule = getCareRule(ruleId);
+  if (!rule) {
+    return (
+      <div className="rounded-xl bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground">
+        该方案已删除
+      </div>
+    );
+  }
+
+  return (
+    <CareRuleCard as="div" rule={rule} enabled={rule.enabled} showActions={false} />
+  );
+};
+
 const UserBubble = ({ text }: { text: string }) => (
   <div className="flex justify-end">
     <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm text-primary-foreground shadow-soft">
@@ -121,6 +139,7 @@ const AssistantBubble = ({
             ))}
           </ul>
         )}
+        {reply.ruleId && <AgentRuleCardView ruleId={reply.ruleId} />}
         {reply.table && <AgentTableView table={reply.table} />}
         {extraTable && <AgentTableView table={extraTable} />}
         {reply.actions && reply.actions.length > 0 && (

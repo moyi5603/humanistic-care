@@ -32,6 +32,8 @@ export type HumanityCareAgentReply = {
   list?: string[];
   pieChart?: AgentPieChart;
   actions?: AgentAction[];
+  /** 查方案时展示规则卡片（与列表页同款） */
+  ruleId?: string;
 };
 
 export type TimeRangeKey = "today" | "week" | "month" | "last_month" | "year";
@@ -405,14 +407,8 @@ const buildManageNavigateReply = (
   ]);
 };
 
-const buildQueryRuleReply = (rule: CareRule): HumanityCareAgentReply => {
-  const detail = buildRuleDetailReply(rule);
-  return {
-    ...detail,
-    summary: `${detail.summary}请点击下方按钮查看详情。`,
-    actions: [{ label: "打开规则详情", type: "navigate", payload: ruleEditPath(rule) }],
-  };
-};
+const buildQueryRuleReply = (rule: CareRule): HumanityCareAgentReply =>
+  buildRuleDetailReply(rule);
 
 const ambiguousManageSummary = (intent: ManageIntent) =>
   `匹配到多个方案，请先明确要${manageVerb[intent]}的方案（可回复序号或名称）。`;
@@ -1482,17 +1478,6 @@ export const dispatchHumanityCareAgent = (
 function buildRuleDetailReply(rule: CareRule): HumanityCareAgentReply {
   return {
     summary: `「${rule.name}」规则详情：`,
-    table: {
-      headers: ["字段", "内容"],
-      rows: [
-        ["类型", careTypeLabel[rule.type]],
-        ["状态", rule.enabled ? "已启用" : "已停用"],
-        ["关怀对象", rule.audience],
-        ["触达时间", rule.triggerTime],
-        ["积分", `${rule.points} 分`],
-        ["累计触达", `${rule.reached} 人次`],
-        ["文案模板", rule.template.slice(0, 24) + (rule.template.length > 24 ? "…" : "")],
-      ],
-    },
+    ruleId: rule.id,
   };
 }

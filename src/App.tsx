@@ -19,6 +19,9 @@ import NotFound from "./pages/NotFound.tsx";
 import WeatherCareContentPrototype from "./pages/prototype/WeatherCareContentPrototype.tsx";
 import WeatherCareContentSheetPrototype from "./pages/prototype/WeatherCareContentSheetPrototype.tsx";
 import WorkloadOvertimeTriggerPrototype from "./pages/prototype/WorkloadOvertimeTriggerPrototype.tsx";
+import ReachTrendLineChartPrototype from "./pages/prototype/ReachTrendLineChartPrototype.tsx";
+import CareCapabilityGridPrototype from "./pages/prototype/CareCapabilityGridPrototype.tsx";
+import EventCarePrototype from "./pages/prototype/EventCarePrototype.tsx";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +58,15 @@ const App = () => (
             path="/prototype/workload-overtime-trigger"
             element={<WorkloadOvertimeTriggerPrototype />}
           />
+          <Route
+            path="/prototype/reach-trend-line-chart"
+            element={<ReachTrendLineChartPrototype />}
+          />
+          <Route
+            path="/prototype/care-capability-grid"
+            element={<CareCapabilityGridPrototype />}
+          />
+          <Route path="/prototype/event-care" element={<EventCarePrototype />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

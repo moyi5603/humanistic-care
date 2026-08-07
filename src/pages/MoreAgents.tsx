@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, Search, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { agents, categoryMeta, type AgentCategory } from "@/data/agents";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,11 @@ const tabs: { key: TabKey; label: string }[] = [
 
 const MoreAgents = () => {
   const navigate = useNavigate();
-  const [active, setActive] = useState<TabKey>("communication");
+  const location = useLocation();
+  const initialTab =
+    (location.state as { agentCategory?: TabKey } | null)?.agentCategory ??
+    "communication";
+  const [active, setActive] = useState<TabKey>(initialTab);
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {

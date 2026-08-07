@@ -14,6 +14,16 @@ export const formatMobileDate = (iso: string | undefined) => {
   return `${y}年${m}月${d}日`;
 };
 
+/** MM-DD → 5月19日 */
+export const formatMobileMonthDay = (md: string | undefined) => {
+  if (!md) return "请选择日期";
+  const [m, d] = md.split("-").map(Number);
+  if (!m || !d) return "请选择日期";
+  return `${m}月${d}日`;
+};
+
+export type MobileDateMode = "date" | "month-day";
+
 const parseIso = (iso?: string) => {
   if (!iso) return null;
   const [y, m, d] = iso.split("-").map(Number);
@@ -21,10 +31,22 @@ const parseIso = (iso?: string) => {
   return { y, m, d };
 };
 
+const parseMd = (md?: string) => {
+  if (!md) return null;
+  const [m, d] = md.split("-").map(Number);
+  if (!m || !d) return null;
+  return { m, d };
+};
+
 const toIso = (y: number, m: number, d: number) =>
   `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
+const toMd = (m: number, d: number) =>
+  `${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
 const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+/** 月日模式用闰年，保证 2 月可选到 29 */
+const MD_REF_YEAR = 2024;
 
 const clampYmd = (
   y: number,
@@ -138,7 +160,9 @@ type DateWheelModalProps = {
   value: string;
   min?: string;
   max?: string;
-  onConfirm: (iso: string) => void;
+  /** date = 年月日；month-day = 仅月日 */
+  mode?: MobileDateMode;
+  onConfirm: (value: string) => void;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -148,16 +172,27 @@ const DateWheelModal = ({
   value,
   min,
   max,
+  mode = "date",
   onConfirm,
   onOpenChange,
 }: DateWheelModalProps) => {
   const today = new Date();
-  const minP = parseIso(min);
-  const maxP = parseIso(max);
+  const monthDayOnly = mode === "month-day";
+  const minP = monthDayOnly ? null : parseIso(min);
+  const maxP = monthDayOnly ? null : parseIso(max);
   const startYear = minP?.y ?? today.getFullYear() - 2;
   const endYear = maxP?.y ?? today.getFullYear() + 5;
 
   const initial = useMemo(() => {
+    if (monthDayOnly) {
+      const md = parseMd(value);
+      const m = md?.m ?? today.getMonth() + 1;
+      const d = Math.min(
+        md?.d ?? today.getDate(),
+        daysInMonth(MD_REF_YEAR, m),
+      );
+      return { y: MD_REF_YEAR, m, d };
+    }
     const p = parseIso(value) ?? {
       y: today.getFullYear(),
       m: today.getMonth() + 1,
@@ -165,7 +200,7 @@ const DateWheelModal = ({
     };
     return clampYmd(p.y, p.m, p.d, min, max);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, min, max]);
+  }, [value, min, max, monthDayOnly]);
 
   const [y, setY] = useState(initial.y);
   const [m, setM] = useState(initial.m);
@@ -173,11 +208,17 @@ const DateWheelModal = ({
 
   useEffect(() => {
     if (!open) return;
+    if (monthDayOnly) {
+      setY(MD_REF_YEAR);
+      setM(initial.m);
+      setD(initial.d);
+      return;
+    }
     const next = clampYmd(initial.y, initial.m, initial.d, min, max);
     setY(next.y);
     setM(next.m);
     setD(next.d);
-  }, [open, initial.y, initial.m, initial.d, min, max]);
+  }, [open, initial.y, initial.m, initial.d, min, max, monthDayOnly]);
 
   const years = useMemo(
     () =>
@@ -186,21 +227,28 @@ const DateWheelModal = ({
   );
 
   const months = useMemo(() => {
+    if (monthDayOnly) {
+      return Array.from({ length: 12 }, (_, i) => i + 1);
+    }
     let from = 1;
     let to = 12;
     if (minP && y === minP.y) from = minP.m;
     if (maxP && y === maxP.y) to = maxP.m;
     return Array.from({ length: to - from + 1 }, (_, i) => from + i);
-  }, [y, minP, maxP]);
+  }, [y, minP, maxP, monthDayOnly]);
 
   const days = useMemo(() => {
-    const maxD = daysInMonth(y, m);
+    const yearForDays = monthDayOnly ? MD_REF_YEAR : y;
+    const maxD = daysInMonth(yearForDays, m);
+    if (monthDayOnly) {
+      return Array.from({ length: maxD }, (_, i) => i + 1);
+    }
     let from = 1;
     let to = maxD;
     if (minP && y === minP.y && m === minP.m) from = minP.d;
     if (maxP && y === maxP.y && m === maxP.m) to = maxP.d;
     return Array.from({ length: to - from + 1 }, (_, i) => from + i);
-  }, [y, m, minP, maxP]);
+  }, [y, m, minP, maxP, monthDayOnly]);
 
   useEffect(() => {
     if (!months.includes(m)) setM(months[0] ?? 1);
@@ -210,7 +258,7 @@ const DateWheelModal = ({
     if (!days.includes(d)) setD(days[days.length - 1] ?? 1);
   }, [days, d]);
 
-  const wheelKey = `${open}-${y}-${m}`;
+  const wheelKey = `${open}-${monthDayOnly ? "md" : y}-${m}`;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -234,7 +282,7 @@ const DateWheelModal = ({
             <button
               type="button"
               onClick={() => {
-                onConfirm(toIso(y, m, d));
+                onConfirm(monthDayOnly ? toMd(m, d) : toIso(y, m, d));
                 onOpenChange(false);
               }}
               className="text-sm font-semibold text-primary active:opacity-70"
@@ -248,13 +296,15 @@ const DateWheelModal = ({
               className="pointer-events-none absolute inset-x-4 top-1/2 z-0 h-11 -translate-y-1/2 rounded-lg bg-secondary/80"
               aria-hidden
             />
-            <WheelColumn
-              items={years}
-              value={y}
-              onChange={setY}
-              unit="年"
-              scrollKey={`y-${wheelKey}`}
-            />
+            {!monthDayOnly && (
+              <WheelColumn
+                items={years}
+                value={y}
+                onChange={setY}
+                unit="年"
+                scrollKey={`y-${wheelKey}`}
+              />
+            )}
             <WheelColumn
               items={months}
               value={m}
@@ -282,11 +332,14 @@ type MobileDateFieldProps = {
   onChange: (value: string) => void;
   min?: string;
   max?: string;
+  /** date = 年月日（默认）；month-day = 仅月日，值为 MM-DD */
+  mode?: MobileDateMode;
   className?: string;
 };
 
 /**
  * 移动端日期：点击行 → 底部蒙层 + 年/月/日滚轮（Radix Dialog 嵌套，避免 Sheet 拦截点击）。
+ * mode="month-day" 时只滚月日，值为 MM-DD。
  */
 export const MobileDateField = ({
   label,
@@ -294,9 +347,12 @@ export const MobileDateField = ({
   onChange,
   min,
   max,
+  mode = "date",
   className,
 }: MobileDateFieldProps) => {
   const [open, setOpen] = useState(false);
+  const display =
+    mode === "month-day" ? formatMobileMonthDay(value) : formatMobileDate(value);
 
   return (
     <>
@@ -320,7 +376,7 @@ export const MobileDateField = ({
                 value ? "text-foreground" : "text-muted-foreground",
               )}
             >
-              {formatMobileDate(value)}
+              {display}
             </span>
           </span>
         </span>
@@ -333,6 +389,7 @@ export const MobileDateField = ({
         value={value}
         min={min}
         max={max}
+        mode={mode}
         onOpenChange={setOpen}
         onConfirm={onChange}
       />
